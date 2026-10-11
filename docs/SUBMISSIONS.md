@@ -5,7 +5,7 @@ One submission per day. Public score = 55 hidden games; final ranking uses the o
 | date (UTC) | variant | kernel version | commit (git) | public score | notes |
 |---|---|---|---|---|---|
 | 2026-10-12 | v1-franzen-faithful | not yet committed | 110b447 | - | GPU quota exhausted (37/30 h); first GPU commit possible 2026-10-17 00:00 UTC |
-| 2026-10-12 | v1-cpucheck (CPU, not a submission) | arc3-duck-v1-cpucheck v1-v2 | 110b447 | n/a | v1 failed: JSON `false` rendered into Python (fixed, test added); v2 running |
+| 2026-10-12 | v1-cpucheck (CPU, not a submission) | arc3-duck-v1-cpucheck v1-v3 | 0771be0 | n/a | v1: JSON `false` rendered into Python (fixed + test). v2: everything up to the GPU driver lookup worked (fixed for CPU). **v3 COMPLETE**: on the Python 3.13 image, `/usr/bin/python3.12` passes the stdlib check, the full Pennyroyal cp312 wheelhouse installs under it (`sglang 0.5.19+gd00d88efc8d6`, `torch 2.13.0+cu130`), bundle + pickles + TAAF loop + offline games + `submission.parquet` + `diagnostics.html` all fine. Only the model server itself is untested until the GPU quota refreshes. |
 
 Reference distribution for the v1 configuration (Franzen copies, Son Pham, Oct 2):
 mean 25.77, SD 3.93, median 26.19.

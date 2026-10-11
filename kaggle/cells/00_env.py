@@ -40,6 +40,8 @@ INPUTS = __INPUTS__
 def _resolve_input(ref: str, *, model: bool = False, required: bool = True) -> str:
     """Kaggle mounts datasets at /kaggle/input/datasets/<owner>/<slug> (new layout) or
     /kaggle/input/<slug> (old layout); models at /kaggle/input/models/<owner>/<slug>/<fw>/<v>/<n>."""
+    if not ref:
+        return ""
     parts = ref.split("/")
     candidates = []
     if model:
@@ -135,13 +137,12 @@ def resolve_server_python() -> str:
             if _python_ok(str(exe)):
                 return str(exe)
             print(f"standalone CPython at {exe} failed its import check")
-    for exe in ("/usr/bin/python3.12", "/usr/local/bin/python3.12"):
-        if Path(exe).exists():
-            print(f"falling back to {exe} without the full import check")
-            return exe
     for exe in system:
         if _python_ok(exe):
             return exe
+    for exe in system:
+        print(f"falling back to {exe} without the full import check")
+        return exe
     raise RuntimeError("No CPython 3.12 available: no standalone tarball attached and no system python3.12")
 
 

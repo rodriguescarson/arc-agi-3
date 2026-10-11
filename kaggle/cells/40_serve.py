@@ -208,7 +208,9 @@ for so in sorted(libdir.glob("*.so.*")):
     link = libdir / re.sub(r"\.so\..*$", ".so", so.name)
     if not link.exists() and not link.is_symlink(): link.symlink_to(so.name)
 assert (libdir / "libcudart.so").exists(), "libcudart.so missing: JIT linker cannot find CUDA runtime"
-if not (libdir / "libcuda.so").exists():
+if CPU_SMOKE:
+    print("cpu smoke: no GPU driver in this session; skipping the libcuda.so lookup")
+elif not (libdir / "libcuda.so").exists():
     candidates = []
     for directory in ("/usr/local/nvidia/lib64", "/usr/local/nvidia/lib", "/usr/lib/x86_64-linux-gnu", "/usr/lib64"):
         candidates += sorted(p for p in Path(directory).glob("libcuda.so*") if p.is_file())

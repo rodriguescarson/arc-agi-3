@@ -25,7 +25,7 @@ So the strategy is not "find a clever trick locally". It is:
 
 | id | what changes vs the previous | why | status |
 |---|---|---|---|
-| v1-franzen-faithful | our bundle dataset, Python 3.12 selection, smoke commits | pipeline + own baseline draw | built, pushed 2026-10-12 |
+| v1-franzen-faithful | our bundle dataset, Python 3.12 selection, smoke commits | pipeline + own baseline draw | built; GPU push blocked by quota until 2026-10-17 00:00 UTC |
 | v2-level-memory | `solved_levels` in the REPL + one line in the level-up prompt; "level restarted" wording; drop the "ignore the bar" line | rellik13's three fixes; cheap; cannot cost tokens | next |
 | v3-throughput | REAP-448e NVFP4 target (`boristown/qwen3-8-flash-next-nvfp4-reap-448e`) with the NVFP4 draft, freeing VRAM for KV | more tokens per game is the lever every winner cites | serving recipe for an NVFP4 target exists in rellik13's public notebook (`data/bundles/sirikilohit-cell11.py`, Pennyroyal 2.5.0, `keithtyser/qwen3-8-flash-next-nvfp4` + RadixArk MTP); port after v1/v2 run clean |
 | v4-scheduler | fewer slots (8) with longer context, or UCB slices | comparison table: fewest slots + longest context scored best | after v3 |

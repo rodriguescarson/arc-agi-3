@@ -1,0 +1,24 @@
+[project]
+name = "arc3"
+version = "0.1.0"
+description = "ARC Prize 2026 ARC-AGI-3 entry: Duck-harness lineage notebook pipeline plus CPU-side tooling"
+requires-python = ">=3.12"
+dependencies = ["arc-agi>=0.9.8", "numpy", "pandas", "pyarrow", "python-dotenv", "kaggle>=2.2"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.setuptools]
+packages = ["arc3", "arc3.agents"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["harness", "third_party", "data", "kaggle/build", "kaggle/cells"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["E501"]

@@ -27,12 +27,21 @@ So the strategy is not "find a clever trick locally". It is:
 |---|---|---|---|
 | v1-franzen-faithful | our bundle dataset, Python 3.12 selection, smoke commits | pipeline + own baseline draw | built, pushed 2026-10-12 |
 | v2-level-memory | `solved_levels` in the REPL + one line in the level-up prompt; "level restarted" wording; drop the "ignore the bar" line | rellik13's three fixes; cheap; cannot cost tokens | next |
-| v3-throughput | REAP-448e NVFP4 target (`boristown/qwen3-8-flash-next-nvfp4-reap-448e`) with the NVFP4 draft, freeing VRAM for KV | more tokens per game is the lever every winner cites | needs a serving config we cannot test locally; try only after v1/v2 run clean |
+| v3-throughput | REAP-448e NVFP4 target (`boristown/qwen3-8-flash-next-nvfp4-reap-448e`) with the NVFP4 draft, freeing VRAM for KV | more tokens per game is the lever every winner cites | serving recipe for an NVFP4 target exists in rellik13's public notebook (`data/bundles/sirikilohit-cell11.py`, Pennyroyal 2.5.0, `keithtyser/qwen3-8-flash-next-nvfp4` + RadixArk MTP); port after v1/v2 run clean |
 | v4-scheduler | fewer slots (8) with longer context, or UCB slices | comparison table: fewest slots + longest context scored best | after v3 |
 
 Decision rule for keeping a change: it stays if its public draw is >= the running mean of our
 previous draws minus 1 SD **and** the run log shows the mechanism did what it was meant to
 (e.g. more tokens generated, fewer no-op actions). A single higher score is not evidence.
+
+## Timeline given the quota
+
+- Oct 12-16: no GPU commits possible (quota refreshes Oct 17 00:00 UTC). Use the days for the CPU
+  pipeline check, v2/v3 preparation, and (if Carson approves the spend) one RunPod validation of
+  v1 boot + throughput.
+- Oct 17: commit v1 at 00:00 UTC, submit the moment it completes; commit v2 the same day.
+- Oct 18 - Nov 2: one submission per day, alternating the best-known config with one new
+  mechanism; freeze on Oct 31 and spend the last two days re-submitting the best config.
 
 ## What we will not do
 

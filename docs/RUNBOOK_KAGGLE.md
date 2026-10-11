@@ -23,6 +23,13 @@ Make both datasets **public** before the deadline (prize rule).
 .venv/bin/kaggle kernels output carsonrodrigues/arc3-duck-v1 -p data/runs/arc3-duck-v1   # log + diagnostics.html
 ```
 
+**GPU quota (checked 2026-10-12):** the account had used 37 h of the 30 h weekly allowance; it refreshes
+**2026-10-17 00:00 UTC**. `kaggle kernels push` for a GPU kernel fails with "Maximum weekly GPU quota
+reached" until then. Check with
+`.venv/bin/python -c "from kaggle.api.kaggle_api_extended import KaggleApi as K;a=K();a.authenticate();a.quota_view_cli()"`.
+The CPU variant `kaggle/variants/v1-cpucheck.json` (kernel `arc3-duck-v1-cpucheck`) exercises everything
+except the model server and costs no quota.
+
 `--push` is a *commit* (Save & Run All). On the RTX Pro 6000 it waits in a queue that has
 been 8 h long, then runs the smoke configuration (two public games, ~35 min including the
 ~9 min model load). It consumes the weekly 30 h GPU quota; the scored rerun does not.

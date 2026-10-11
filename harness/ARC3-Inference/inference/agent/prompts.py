@@ -344,3 +344,40 @@ SUMMARY_REQUEST_PROMPT = (
     "leave out is gone.\n"
     "Length is not a problem here; leaving something out is."
 )
+
+
+# --- v2 additions (carsonrodrigues), each gated by an environment flag in tool_agent.py ---
+
+LEVEL_MEMORY_ADDENDUM = (
+    "- `solved_levels()` returns one dict per level you have already completed in this game: "
+    "`level`, `winning_actions` (the action sequence of the attempt that completed it, "
+    "oldest first), `n_actions`, `attempts` (1 + resets on that level) and `total_actions`. "
+    "It is computed from `history`, costs no in-game action, and is the fastest way to recall "
+    "what worked: mechanics and the shape of a winning plan usually carry over to the next level "
+    "even when the layout changes.\n"
+)
+
+LEVEL_MEMORY_START_LINE = (
+    "\n\nBefore planning, call `solved_levels()` once: the previous level's winning sequence and "
+    "attempt count are there. Reuse its mechanics as your first hypothesis and spend actions on "
+    "what is new on this board."
+)
+
+BAR_BUDGET_GUIDANCE_OLD = (
+    "- In many games, a long horizontal or vertical line near an edge is a timer or remaining-steps bar. It often shrinks or changes each step. If you identify such a bar, do not get distracted by it or treat it as core gameplay state unless there is concrete evidence that it interacts with the puzzle mechanics.\n"
+)
+
+BAR_BUDGET_GUIDANCE_NEW = (
+    "- In many games, a long horizontal or vertical line near an edge is a remaining-actions "
+    "budget bar: it shrinks by one unit per action and the attempt fails when it is empty. Read "
+    "its length as the number of actions you still have, plan sequences that fit inside it, and "
+    "prefer short, reliable probes early in an attempt. The bar is not something to click or "
+    "interact with.\n"
+)
+
+
+def apply_bar_budget_guidance(prompt: str) -> str:
+    """ARC3_BAR_GUIDANCE=budget: describe the edge bar as a budget to plan within rather than
+    as a distraction to ignore (rellik13's observation on Milestone 2: 'removing lines that
+    tell the agent to ignore the budget bar' helped)."""
+    return prompt.replace(BAR_BUDGET_GUIDANCE_OLD, BAR_BUDGET_GUIDANCE_NEW)

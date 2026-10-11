@@ -18,6 +18,7 @@ from typing import Any, Callable
 from inference.utils import frame_diff as _frame_diff_module
 from inference.utils import segmentation as _segmentation
 from inference.utils import retained_functions as _retained_functions
+from inference.utils import level_memory as _level_memory_module
 from inference.utils.grid_utils import ARC_COLOR_CHARS
 
 
@@ -44,6 +45,8 @@ _SANDBOX_BOOTSTRAP = textwrap.dedent(
     __FRAME_DIFF_SOURCE__
 
     __RETAINED_FUNCTIONS_SOURCE__
+
+    __LEVEL_MEMORY_SOURCE__
 
     HOST_STDOUT = sys.stdout
 
@@ -407,6 +410,7 @@ _SANDBOX_BOOTSTRAP = textwrap.dedent(
             )
             runtime_globals["last_action"] = last_transition.action if last_transition is not None else None
             runtime_globals["frame_diff"] = frame_diff
+            runtime_globals["solved_levels"] = lambda: compute_solved_levels(runtime_globals.get("history") or [])
             runtime_globals["valid_actions"] = [str(item) for item in state_payload.get("valid_actions", [])]
             runtime_globals["death_ledger"] = state_payload.get("death_ledger") or {"attempts": []}
             runtime_globals["last_action_call_result"] = action_result
@@ -738,6 +742,8 @@ _SANDBOX_BOOTSTRAP = textwrap.dedent(
     "__SEGMENTATION_SOURCE__\n", inspect.getsource(_segmentation)
 ).replace(
     "__FRAME_DIFF_SOURCE__\n", inspect.getsource(_frame_diff_module)
+).replace(
+    "__LEVEL_MEMORY_SOURCE__\n", inspect.getsource(_level_memory_module)
 )
 
 

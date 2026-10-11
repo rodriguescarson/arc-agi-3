@@ -116,21 +116,33 @@ def _python_ok(exe: str) -> bool:
 def resolve_server_python() -> str:
     if sys.version_info[:2] == (3, 12):
         return sys.executable
-    for exe in ("/usr/bin/python3.12", "/usr/local/bin/python3.12", "/opt/conda/bin/python3.12"):
-        if Path(exe).exists() and _python_ok(exe):
+    system = [exe for exe in ("/usr/bin/python3.12", "/usr/local/bin/python3.12", "/opt/conda/bin/python3.12") if Path(exe).exists()]
+    for exe in system:
+        print(f"{exe}: full-stdlib check {'passed' if _python_ok(exe) else 'FAILED'}")
+    if PY312_DATASET_DIR:
+        extracted = sorted(Path(PY312_DATASET_DIR).rglob("bin/python3.12"))
+        for exe in extracted:
+            if _python_ok(str(exe)):
+                return str(exe)
+        tarballs = sorted(Path(PY312_DATASET_DIR).rglob("cpython-3.12*install_only.tar.gz"))
+        if tarballs:
+            dest = Path("/tmp/py312")
+            exe = dest / "python" / "bin" / "python3.12"
+            if not exe.exists():
+                dest.mkdir(parents=True, exist_ok=True)
+                with tarfile.open(tarballs[0]) as tar:
+                    tar.extractall(dest)
+            if _python_ok(str(exe)):
+                return str(exe)
+            print(f"standalone CPython at {exe} failed its import check")
+    for exe in ("/usr/bin/python3.12", "/usr/local/bin/python3.12"):
+        if Path(exe).exists():
+            print(f"falling back to {exe} without the full import check")
             return exe
-    tarballs = sorted(Path(PY312_DATASET_DIR).rglob("cpython-3.12*install_only.tar.gz"))
-    if not tarballs:
-        raise RuntimeError("No CPython 3.12 available and no standalone tarball attached")
-    dest = Path("/tmp/py312")
-    exe = dest / "python" / "bin" / "python3.12"
-    if not exe.exists():
-        dest.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(tarballs[0]) as tar:
-            tar.extractall(dest)
-    if not _python_ok(str(exe)):
-        raise RuntimeError(f"Standalone CPython at {exe} failed its import check")
-    return str(exe)
+    for exe in system:
+        if _python_ok(exe):
+            return exe
+    raise RuntimeError("No CPython 3.12 available: no standalone tarball attached and no system python3.12")
 
 
 SERVER_PYTHON = resolve_server_python()

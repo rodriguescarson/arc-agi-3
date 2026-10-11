@@ -39,3 +39,11 @@ def test_rendered_env_cell_contains_franzen_settings():
     env_cell = dict(build_notebook.render_cells(cfg))["00_env.py"]
     for key in ("LOCAL_ANALYZER_CONTEXT_WINDOW", "ARC3_ANIMATION", "EXPOSE_UNDO", "ARC3_MAX_ACTIVE_STREAMS"):
         assert key in env_cell
+
+
+def test_rendered_literals_are_python_not_json():
+    for path in _variants():
+        cfg = json.loads(path.read_text())
+        for name, src in build_notebook.render_cells(cfg):
+            for bad in (": true", ": false", ": null", " true,", " false,"):
+                assert bad not in src, f"{path.name}/{name} contains JSON literal {bad!r}"

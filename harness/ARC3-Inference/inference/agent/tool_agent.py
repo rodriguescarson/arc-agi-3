@@ -42,6 +42,9 @@ from inference.agent.prompts import (
     WORLD_MODEL_ADDENDUM,
     WORLD_MODEL_FREE_ADDENDUM,
     FRAME_DIFF_HINT_ADDENDUM,
+    LEVEL_MEMORY_ADDENDUM,
+    LEVEL_MEMORY_START_LINE,
+    apply_bar_budget_guidance,
     STEP_VERIFICATION_ADDENDUM,
     PYTHON_ADDENDUM_HEAD,
     PYTHON_ADDENDUM_TAIL,
@@ -112,6 +115,17 @@ def _get_env_bool(name: str, default: bool) -> bool:
     if raw in {"0", "false", "no", "off"}:
         return False
     return default
+
+
+def _level_memory_enabled() -> bool:
+    """ARC3_LEVEL_MEMORY=1 exposes `solved_levels()` in the REPL and mentions it in the
+    system prompt and the level-up prompt. Off preserves the Milestone-2 prompts."""
+    return _get_env_bool("ARC3_LEVEL_MEMORY", False)
+
+
+def _bar_budget_guidance_enabled() -> bool:
+    """ARC3_BAR_GUIDANCE=budget rewrites the edge-bar bullet of the system prompt."""
+    return os.environ.get("ARC3_BAR_GUIDANCE", "").strip().lower() == "budget"
 
 
 def _level_transfer_guidance_enabled() -> bool:
@@ -2714,6 +2728,10 @@ def _build_system_prompt(*, tool_output_tokens: int) -> str:
         # either way - this only controls whether the model is told about it,
         # so the arm measures whether knowing costs more than it returns.
         prompt += FRAME_DIFF_HINT_ADDENDUM
+    if _level_memory_enabled():
+        prompt += LEVEL_MEMORY_ADDENDUM
+    if _bar_budget_guidance_enabled():
+        prompt = apply_bar_budget_guidance(prompt)
     if _get_env_bool("ARC3_STEP_VERIFICATION_HINT", False):
         # General checks during action sequences and targeted probes when search fails.
         prompt += STEP_VERIFICATION_ADDENDUM
@@ -4956,9 +4974,10 @@ class ToolAgent:
                 lines.append("You have completed the run!")
             elif previous_step_summary.get("level_transition"):
                 lines.append(
-                    LEVEL_START_USER_PROMPT
-                    if _level_transfer_guidance_enabled()
-                    else "You have progressed to a new level!"
+                    (LEVEL_START_USER_PROMPT
+                     if _level_transfer_guidance_enabled()
+                     else "You have progressed to a new level!")
+                    + (LEVEL_MEMORY_START_LINE if _level_memory_enabled() else "")
                 )
             else:
                 lines.append(

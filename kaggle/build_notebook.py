@@ -35,17 +35,27 @@ def _git_rev() -> str:
         return "unknown"
 
 
+def literal(value) -> str:
+    """Python source for a JSON-derived value (json.dumps would emit true/false/null)."""
+    import ast
+    import pprint
+
+    text = pprint.pformat(value, width=100, sort_dicts=False)
+    assert ast.literal_eval(text) == value
+    return text
+
+
 def tokens(cfg: dict) -> dict[str, str]:
     return {
-        "__VARIANT__": repr(cfg["variant"]),
-        "__SERVER_STARTUP_TIMEOUT__": repr(int(cfg.get("server_startup_timeout_s", 720))),
-        "__INPUTS__": json.dumps(cfg["inputs"], indent=4),
-        "__SERVED_MODEL_NAME__": repr(cfg["served_model_name"]),
-        "__SMOKE__": json.dumps(cfg["smoke"], indent=4),
-        "__USE_PRIORITY_SCHEDULING__": repr(bool(cfg.get("use_priority_scheduling", True))),
-        "__SETUP_ENV__": json.dumps(cfg["setup_env"], indent=4),
-        "__PRIORITY_ENV__": json.dumps(cfg.get("priority_env", {}), indent=4),
-        "__SOLVER__": json.dumps(cfg["solver"], indent=4),
+        "__VARIANT__": literal(cfg["variant"]),
+        "__SERVER_STARTUP_TIMEOUT__": literal(int(cfg.get("server_startup_timeout_s", 720))),
+        "__INPUTS__": literal(cfg["inputs"]),
+        "__SERVED_MODEL_NAME__": literal(cfg["served_model_name"]),
+        "__SMOKE__": literal(cfg["smoke"]),
+        "__USE_PRIORITY_SCHEDULING__": literal(bool(cfg.get("use_priority_scheduling", True))),
+        "__SETUP_ENV__": literal(cfg["setup_env"]),
+        "__PRIORITY_ENV__": literal(cfg.get("priority_env", {})),
+        "__SOLVER__": literal(cfg["solver"]),
     }
 
 
@@ -130,7 +140,7 @@ def kernel_metadata(cfg: dict) -> dict:
         "enable_internet": False,
         "docker_image_pinning_type": "original",
         "keywords": ["gpu"] if shape else [],
-        "dataset_sources": [inputs["wheelhouse"], inputs["bundle"], inputs["py312"]],
+        "dataset_sources": [ref for ref in (inputs["wheelhouse"], inputs["bundle"], inputs.get("py312")) if ref],
         "kernel_sources": [],
         "competition_sources": [COMPETITION],
         "model_sources": [inputs["model"], inputs["draft"]],

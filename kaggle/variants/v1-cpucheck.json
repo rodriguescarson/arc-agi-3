@@ -2,11 +2,11 @@
   "variant": "v1-cpucheck",
   "kernel_slug": "arc3-duck-v1-cpucheck",
   "title": "arc3 duck v1 cpucheck",
-  "notes": "CPU pipeline check of the v1 notebook: bundle mount, pickles, TAAF loop with SolverRandom on two public games, and the Python 3.12 venv install of the Pennyroyal wheelhouse. Costs no GPU quota. Not for submission.",
+  "notes": "CPU pipeline check of the v1 notebook: bundle mount, pickles, TAAF loop with SolverRandom on two public games, and the Python 3.12 venv install of the Pennyroyal wheelhouse. Costs no GPU quota. Not for submission. (py312 dataset omitted until Kaggle finishes creating it; the system /usr/bin/python3.12 path is exercised)",
   "inputs": {
     "wheelhouse": "dfranzen/pennyroyal-v253",
     "bundle": "carsonrodrigues/arc3-harness-bundle",
-    "py312": "carsonrodrigues/python312-standalone",
+    "py312": "",
     "model": "dfranzen/intel-qwen3.8-flash-next-w4a16-autoround/Transformers/default/1",
     "draft": "dfranzen/albucino-qwen3-8-flash-next-drafter/Transformers/default/1"
   },

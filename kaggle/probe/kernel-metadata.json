@@ -1,0 +1,15 @@
+{
+  "id": "rodriguescarson/arc3-env-probe",
+  "title": "arc3-env-probe",
+  "code_file": "probe.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": ["arc-prize-2026-arc-agi-3"],
+  "model_sources": []
+}

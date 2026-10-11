@@ -6,7 +6,7 @@
   "inputs": {
     "wheelhouse": "dfranzen/pennyroyal-v253",
     "bundle": "carsonrodrigues/arc3-harness-bundle",
-    "py312": "carsonrodrigues/py312-standalone",
+    "py312": "carsonrodrigues/py312-portable",
     "model": "dfranzen/intel-qwen3.8-flash-next-w4a16-autoround/Transformers/default/1",
     "draft": "dfranzen/albucino-qwen3-8-flash-next-drafter/Transformers/default/1"
   },

@@ -124,7 +124,7 @@ def resolve_server_python() -> str:
         for exe in extracted:
             if _python_ok(str(exe)):
                 return str(exe)
-        tarballs = sorted(Path(PY312_DATASET_DIR).rglob("cpython-3.12*install_only.tar.gz"))
+        tarballs = sorted(p for p in Path(PY312_DATASET_DIR).rglob("cpython-3.12*") if p.is_file() and (p.name.endswith(".tar.gz") or p.name.endswith(".tgz.bin")))
         if tarballs:
             dest = Path("/tmp/py312")
             exe = dest / "python" / "bin" / "python3.12"

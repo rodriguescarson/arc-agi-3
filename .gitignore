@@ -18,3 +18,4 @@ runs/
 kaggle/build/
 kaggle/*.ipynb
 *.log
+kaggle/state.json

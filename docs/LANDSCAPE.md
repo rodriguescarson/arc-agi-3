@@ -87,6 +87,16 @@ tokens at xhigh; LiveCodeBench 88.4 -> 90.4; Terminal-Bench 67.6 -> 69.7; IFBenc
 vendor numbers, BF16). Same tokenizer (sha256 identical to Franzen's FR-Spec map), same AutoRound
 W4A16 packaging (`auto_round:auto_gptq`, g128 sym). Difference from Intel's quant: Swift also quantises
 `self_attn.{q,k,v,o}_proj` and `linear_attn.{in_proj_qkv,in_proj_z,out_proj}` (Intel leaves them BF16).
+Loader check (free CPU kernel `arc3-sglang-source-probe-cpu`, four versions, Pennyroyal sglang
+0.5.19+gd00d88efc8d6): AutoRound resolves fused modules through `packed_modules_mapping`, which for
+Qwen3.5/4 includes `in_proj_qkvz` and `in_proj_ba`, and the generic merged/QKV loaders handle packed
+output dims; the fused in_proj GEMM falls back to two GEMMs when a projection is quantised. The one
+gap: `Qwen3_5GatedDeltaNet._bind_packed_weight_loaders` only wraps `weight` and the FP8 scale params,
+and its split sizes ignore packing, so Swift's `in_proj_qkv.{qweight,qzeros,scales,g_idx}` would hit
+the generic loader with a tuple shard id. v3 patches that at boot (`serve_cfg.PATCH_GDN_PACKED_IN_PROJ`,
+anchor-checked against the wheel, unit-tested on the captured source); if the patch or the load still
+fails, the notebook relaunches on Franzen's Intel checkpoint. Gated attention with quantised `q_proj`
+is the remaining untested path.
 Kaggle mirrors: `phuongncn/arc3-qwen38-swift-w4a16-autoround` (two PyTorch instances, 177 GB, verbatim)
 and `lordhansolo/swift-1-5-qwen3-8-flash-next-nvfp4` (Lord Han Solo served Swift NVFP4 on vLLM for his
 23.84). License: Swift Open License 1.0 (free under US$1M revenue) on top of Qwen Community 1.0. This is

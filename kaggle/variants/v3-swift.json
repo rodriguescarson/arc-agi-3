@@ -2,7 +2,7 @@
   "variant": "v3-swift",
   "kernel_slug": "arc3-duck-v3-swift",
   "title": "arc3 duck v3 (Swift-1.5 Flash-Next)",
-  "notes": "v1 with the target checkpoint swapped for UkisAI's Swift-1.5 post-train of Qwen3.8-Flash-Next (claimed 63% fewer thinking tokens at <1% accuracy loss on xhigh; same tokenizer, same AutoRound W4A16 packaging, so the FR-Spec map and Albucino draft are reused unchanged). Mechanism: more turns per game within the same 9 h. Served from Fususu's verbatim two-part Kaggle mirror; if the server never becomes healthy the notebook relaunches on Franzen's Intel checkpoint so the day's slot still yields a real run.",
+  "notes": "v1 with the target checkpoint swapped for UkisAI's Swift-1.5 post-train of Qwen3.8-Flash-Next (claimed 63% fewer thinking tokens at <1% accuracy loss on xhigh; same tokenizer, same AutoRound W4A16 packaging, so the FR-Spec map and Albucino draft are reused unchanged). Mechanism: more turns per game within the same 9 h. Served from Fususu's verbatim two-part Kaggle mirror; if the server never becomes healthy the notebook relaunches on Franzen's Intel checkpoint so the day's slot still yields a real run. Pennyroyal's Gated-DeltaNet loader is patched at boot (serve_cfg PATCH_GDN_PACKED_IN_PROJ) so the quantised in_proj_qkv/in_proj_z shards load head-first; the patch is anchor-checked against the wheel.",
   "inputs": {
     "wheelhouse": "dfranzen/pennyroyal-v253",
     "bundle": "carsonrodrigues/arc3-harness-bundle",
@@ -86,5 +86,8 @@
     "passes": 1,
     "save_request_logs": true
   },
-  "model_label": "Swift-1.5 Qwen3.8-Flash-Next (UkisAI post-train, AutoRound W4A16; Swift Open License 1.0 + Qwen Community 1.0)"
+  "model_label": "Swift-1.5 Qwen3.8-Flash-Next (UkisAI post-train, AutoRound W4A16; Swift Open License 1.0 + Qwen Community 1.0)",
+  "serve_cfg": {
+    "PATCH_GDN_PACKED_IN_PROJ": true
+  }
 }

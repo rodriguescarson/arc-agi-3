@@ -56,6 +56,7 @@ def tokens(cfg: dict) -> dict[str, str]:
         "__SETUP_ENV__": literal(cfg["setup_env"]),
         "__PRIORITY_ENV__": literal(cfg.get("priority_env", {})),
         "__SOLVER__": literal(cfg["solver"]),
+        "__SERVE_CFG__": literal(cfg.get("serve_cfg", {})),
     }
 
 

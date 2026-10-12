@@ -154,6 +154,7 @@ def prepare_draft_view(target, source_root, work_root):
 # ---- validate notebook inputs / identify the offline bundle ----
 MODEL_DIR = str(Path(MODEL_DIR).expanduser().resolve())
 assert Path(MODEL_DIR).is_dir(), f"model dir not found: {MODEL_DIR}"
+CFG.update(__SERVE_CFG__)   # per-variant overrides (kaggle/variants/*.json "serve_cfg")
 assert CFG["CUDAGRAPH_MAXBS"] >= CFG["MAXREQ"], "CUDAGRAPH_MAXBS must cover MAXREQ"
 assert CFG["CHUNK"] > 0 and CFG["CHUNK"] % 64 == 0
 # Refuse to start a second server on an occupied port; do not kill other jobs.
@@ -258,7 +259,7 @@ env.update({
 })
 run([str(Path(CUDA_HOME) / "bin/nvcc"), "--version"], env=env)
 print("Host compiler:", CXX)
-# Report the optional later caching patch. This cell does not modify wheel code.
+# Report the installed stack.
 run([PYTHON, "-c", '''import pathlib, sys, sglang, torch
 print("venv python", sys.version.split()[0], "| sglang", sglang.__version__, "| torch", torch.__version__)
 if torch.cuda.is_available():
@@ -266,6 +267,52 @@ if torch.cuda.is_available():
 else:
     print("CUDA unavailable in this session")
 '''], env=env)
+# ---- optional source patch: Gated-DeltaNet loader for packed (GPTQ/AutoRound) in_proj ----
+def patch_gdn_packed_in_proj(text):
+    """Pennyroyal's Qwen3_5GatedDeltaNet re-binds the split-checkpoint loaders (in_proj_qkv+in_proj_z
+    -> in_proj_qkvz, in_proj_b+in_proj_a -> in_proj_ba) only for `weight` and the FP8 scale params,
+    and its split sizes ignore packing.  A checkpoint that quantises the linear-attention projections
+    (Swift-1.5 AutoRound; Intel's leaves them BF16) ships qweight/qzeros/scales/g_idx there, so the
+    tuple shard id would reach the generic loader and fail.  Bind the wrapper to those params too,
+    shrink packed output dims by the pack factor, and copy per-input tensors (g_idx) whole.
+    Raises AssertionError if the anchors are not found exactly once (wrong wheel, or already patched)."""
+    edits = [
+        ('for attr_name in ("weight", "weight_scale_inv", "weight_scale", "input_scale"):',
+         'for attr_name in ("weight", "weight_scale_inv", "weight_scale", "input_scale", "qweight", "qzeros", "scales", "g_idx"):'),
+        ("        # Normal weight / non-block quant tensor\n"
+         "        return [module.output_sizes[idx] for idx in loaded_shard_id]",
+         "        # Normal weight / non-block quant tensor; packed (GPTQ/AutoRound) output dims shrink by the pack factor\n"
+         "        sizes = [module.output_sizes[idx] for idx in loaded_shard_id]\n"
+         "        packed_dim = getattr(param, \"packed_dim\", None)\n"
+         "        if packed_dim is not None and packed_dim == getattr(param, \"output_dim\", 0):\n"
+         "            factor = getattr(param, \"pack_factor\", None) or getattr(param, \"packed_factor\", None) or 1\n"
+         "            sizes = [int(size // factor) for size in sizes]\n"
+         "        return sizes"),
+        ("            if isinstance(loaded_shard_id, tuple):\n"
+         "                split_sizes = cls._get_split_sizes_for_param(",
+         "            if isinstance(loaded_shard_id, tuple):\n"
+         "                if not hasattr(param, \"output_dim\"):\n"
+         "                    # per-input tensors (g_idx) are shared by every output shard\n"
+         "                    return original_weight_loader(param, loaded_weight, None)\n"
+         "                split_sizes = cls._get_split_sizes_for_param("),
+    ]
+    for old, _ in edits:
+        assert text.count(old) == 1, f"patch anchor not found exactly once: {old[:60]!r}"
+    for old, new in edits:
+        text = text.replace(old, new)
+    return text
+
+
+if CFG.get("PATCH_GDN_PACKED_IN_PROJ") and not CPU_SMOKE:
+    sglang_dir = subprocess.run([PYTHON, "-c", "import sglang, os; print(os.path.dirname(sglang.__file__))"],
+                                capture_output=True, text=True, check=True, env=env).stdout.strip()
+    target = Path(sglang_dir, "srt", "models", "qwen3_5.py")
+    try:
+        target.write_text(patch_gdn_packed_in_proj(target.read_text()))
+        print("patched Gated-DeltaNet packed in_proj loader:", target)
+    except AssertionError as exc:
+        print("GDN packed in_proj patch NOT applied (server will run unpatched):", exc)
+
 if CPU_SMOKE:
     print("cpu smoke: wheelhouse installed under", PYTHON, "- skipping the model server")
 

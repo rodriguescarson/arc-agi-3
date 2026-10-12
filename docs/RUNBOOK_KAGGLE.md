@@ -43,6 +43,8 @@ output, so check that file before logging which model a draw came from.
 
 Free source probes: `kaggle/probes/sglang-src-probe/` is a CPU script kernel that unzips the Pennyroyal
 SGLang wheel and prints the loader code paths (used to check Swift's quantised attention layers).
+A variant's `serve_cfg` overrides cell 40's `CFG` (e.g. `PATCH_GDN_PACKED_IN_PROJ`, the Swift loader
+patch; `SPEC`, `FRSPEC`, `MAXREQ`, ...). Server outcome per run: `served_model.txt` in the output.
 
 ## Submit (one per day, 23:59 UTC boundary)
 

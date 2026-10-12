@@ -21,7 +21,7 @@ Times are IST unless marked UTC. Competition deadlines are UTC.
 
 1. **GitHub Actions cron** `.github/workflows/daily-submit.yml`, every 2 h at :15 UTC. On this account scheduled runs lag by hours (none fired in the 11 h after the merge on Oct 12), so it is not the primary trigger.
 2. **LaunchAgent on this Mac** `~/Library/LaunchAgents/com.carson.arc3-daily-submit.plist`: every 2 h while the Mac is awake it runs `gh workflow run daily-submit.yml`. Verified 2026-10-13 01:08 IST (run 38298924033 succeeded). Log: `~/Library/Logs/arc3/daily-submit.log`. Remove with `launchctl bootout gui/$(id -u)/com.carson.arc3-daily-submit`.
-3. **claude.ai routine** "arc3: dispatch daily-submit workflow" (`trig_01YSqbMMHHuCFKzDbZVL32V8`) at 00:20 and 06:20 UTC (05:50 / 11:50 IST) in a cloud session on this repo; it only dispatches the workflow and notifies on failure.
+3. **claude.ai routine** "arc3: dispatch daily-submit workflow" (`trig_01YSqbMMHHuCFKzDbZVL32V8`) at 00:20 and 06:20 UTC (05:50 / 11:50 IST) in a cloud session on this repo; it only dispatches the workflow (REST: `gh api -X POST repos/rodriguescarson/arc-agi-3/actions/workflows/daily-submit.yml/dispatches -f ref=main`, because `gh workflow run` needs GraphQL, which that sandbox blocks) and sends a push notification if the run fails. Test fires on 2026-10-13 01:10 and 01:13 IST both queued a run that succeeded.
 
 Several dispatches per day are harmless: ticks are idempotent (the slot is checked live on Kaggle) and the workflow's concurrency group queues them.
 

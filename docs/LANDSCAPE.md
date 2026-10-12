@@ -54,6 +54,53 @@ for the remaining headroom: better models (everyone is "waiting for Qwen 4"), mo
 game (serving engineering: REAP-pruned experts, KV quantisation, prefix caching), and harness
 work now that serving is roughly equal across the public notebooks.
 
+## What changed since Oct 1 (checked 2026-10-12)
+
+**Fine-tuning: tried by others, no gain on this model.** Kaggle threads 742835 and 739047:
+
+| who | what | result |
+|---|---|---|
+| blakewest | SFT on H200s; teachers Qwen Max / Astra; synthetic LS20 + CD82 variants; stall-point and periodic trajectories; Flash-Next and 27B | "No permutation of these has been able to make meaningful improvements" |
+| AAAAAtjc | RL pipeline for Flash-Next on a full H200 node | "did not gain any performance"; "rtx 6000 pro can not be used for training of any ~100B model even with aggressive cpu offload" |
+| Scott Le Grand | behavioural cloning from the same model (Qwen 3.6 27B) | +2 on public games, "didn't translate" to the hidden set |
+| manas joshi | STaR LoRA on Qwen 3.6 27B, own winning trajectories (CC0: `arc3-sft-trajectories`, `arc3-duck-lora-sft`) | LB 1.25 -> 1.94 in August; "high variance", "naively scaling the data hurt", "base-model-specific" |
+| Ya Xu | LoRA | "only backfired on me" |
+
+Franzen did not fine-tune (write-up: "I did not train or fine-tune the models"). Tufa's harness ships
+vLLM LoRA hooks (`SERVER_ENABLE_LORA`, alias `policy`, Gated-DeltaNet module aliases) and a chat-JSONL
+trace exporter (`inference/tools/traces.py`), so Tufa is set up for it; nothing public shows it working.
+Our serving stack (SGLang, AutoRound W4A16 + MTP draft) has no adapter path. Decision: no fine-tuning.
+
+**Thinking is already maxed.** Franzen sends `enable_thinking=true`; the Qwen3.8 template defaults
+`reasoning_effort` to `xhigh` (the top of xhigh/medium/low) and `preserve_thinking=true` keeps every
+earlier turn's reasoning in context. His write-up: dropping the thinking history is a large regression.
+The remaining knobs are the effort ladder (`ARC3_REASONING_EFFORT_LADDER`, steps down after a
+truncated turn) and our new global `ARC3_REASONING_EFFORT` (v4).
+
+**Compaction (OpenAI's "two settings", 7.8 -> 38.3 on GPT-5.6 Sol: keep reasoning + summarise instead
+of truncate).** Reasoning is already kept. Franzen tried both summary modes (`ARC3_SUMMARY_*`):
+"Neither gave a clear improvement"; off in his submission. Not a priority.
+
+**Swift-1.5 Qwen3.8-Flash-Next (UkisAI, Sep 24).** RL + on-policy-distillation post-train of the same
+model against overthinking: GPQA 89.8 -> 89.6 with 55.8% fewer mean / 63.4% fewer median thinking
+tokens at xhigh; LiveCodeBench 88.4 -> 90.4; Terminal-Bench 67.6 -> 69.7; IFBench 73.2 -> 70.1 (all
+vendor numbers, BF16). Same tokenizer (sha256 identical to Franzen's FR-Spec map), same AutoRound
+W4A16 packaging (`auto_round:auto_gptq`, g128 sym). Difference from Intel's quant: Swift also quantises
+`self_attn.{q,k,v,o}_proj` and `linear_attn.{in_proj_qkv,in_proj_z,out_proj}` (Intel leaves them BF16).
+Kaggle mirrors: `phuongncn/arc3-qwen38-swift-w4a16-autoround` (two PyTorch instances, 177 GB, verbatim)
+and `lordhansolo/swift-1-5-qwen3-8-flash-next-nvfp4` (Lord Han Solo served Swift NVFP4 on vLLM for his
+23.84). License: Swift Open License 1.0 (free under US$1M revenue) on top of Qwen Community 1.0. This is
+our v3: one input swap, the "more turns per game" lever without serving work.
+
+**Harness research (frontier models, public games, not Kaggle-legal as-is):** Schema (arXiv
+2609.39140, Sep 30): program induction instead of prose notes, RHAE 58.7 -> 99.2 with the same model.
+Memento 3 (arXiv 2610.11794, Oct 8): natural-language rulebook compiled to code, verified by replay,
+100 RHAE on all 25 public games. Continual Harness (Karten): 62% of actions from saved skills. Common
+thread: an explicit, executable world model. Franzen's harness already has persistent model-written
+functions; a rulebook mechanism for a 6B-active model is a research item, not a 21-day item.
+
+**Qwen 4:** announced (four sizes, "training"), nothing shipped as of Oct 12.
+
 ## Variance, the thing that decides submissions
 
 - Hundreds of byte-identical Franzen copies: mean 25.77, SD 3.93 (Son Pham, Oct 2).

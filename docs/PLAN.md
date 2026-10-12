@@ -23,12 +23,16 @@ So the strategy is not "find a clever trick locally". It is:
 
 ## Variants, in order
 
-| id | what changes vs the previous | why | status |
+| id | what changes vs v1 | why | status |
 |---|---|---|---|
-| v1-franzen-faithful | our bundle dataset, Python 3.12 selection, smoke commits | pipeline + own baseline draw | built; GPU push blocked by quota until 2026-10-17 00:00 UTC |
-| v2-level-memory | `solved_levels` in the REPL + one line in the level-up prompt; "level restarted" wording; drop the "ignore the bar" line | rellik13's three fixes; cheap; cannot cost tokens | next |
-| v3-throughput | REAP-448e NVFP4 target (`boristown/qwen3-8-flash-next-nvfp4-reap-448e`) with the NVFP4 draft, freeing VRAM for KV | more tokens per game is the lever every winner cites | serving recipe for an NVFP4 target exists in rellik13's public notebook (`data/bundles/sirikilohit-cell11.py`, Pennyroyal 2.5.0, `keithtyser/qwen3-8-flash-next-nvfp4` + RadixArk MTP); port after v1/v2 run clean |
-| v4-scheduler | fewer slots (8) with longer context, or UCB slices | comparison table: fewest slots + longest context scored best | after v3 |
+| v1-franzen-faithful | our bundle dataset, Python 3.12 selection, smoke commits | pipeline + own baseline draw | built; CPU check passed; GPU push blocked by quota until 2026-10-17 00:00 UTC |
+| v3-swift | target checkpoint = Swift-1.5 Qwen3.8-Flash-Next (UkisAI post-train: 55-63% fewer thinking tokens, <1% accuracy loss on xhigh), same tokenizer / draft / FR-Spec map; Intel checkpoint attached as boot fallback | more turns per game with zero serving work; the lever every winner cites | built (`kaggle/variants/v3-swift.json`); CPU check kernel `arc3-duck-v3-cpucheck` pushed; SGLang load of Swift's extra quantised attention projections unverified until the GPU smoke |
+| v2-level-memory | `solved_levels()` in the REPL + one line in the level-up prompt; "level restarted" wording; drop the "ignore the bar" line | rellik13's fixes; cheap; cannot cost tokens | built, unit-tested |
+| v4-effort-medium | `ARC3_REASONING_EFFORT=medium` (template default is xhigh) | fewer thinking tokens per turn (UkisAI table: -76% for the base model at -3.4 GPQA); one flag | built, unit-tested |
+| v5-throughput | REAP-448e NVFP4 target with the NVFP4 draft (rellik13's serving recipe in `data/bundles/sirikilohit-cell11.py`) | frees VRAM for KV; more tokens per game | recipe saved, not ported |
+| v6-scheduler | fewer slots (8) with longer context, or UCB slices | comparison table: fewest slots + longest context scored best | after v5 |
+
+Submission order from Oct 17: v1, v3, v2, v4, then repeat the best draw and interleave v5/v6.
 
 Decision rule for keeping a change: it stays if its public draw is >= the running mean of our
 previous draws minus 1 SD **and** the run log shows the mechanism did what it was meant to
@@ -45,7 +49,10 @@ previous draws minus 1 SD **and** the run log shows the mechanism did what it wa
 
 ## What we will not do
 
-- Fine-tune the model (no GPU budget, no time).
+- Fine-tune the model. Not only budget: four teams report zero gain on Flash-Next (SFT with teachers,
+  RL on an H200 node) and same-model LoRA gains that did not transfer to the hidden set; our SGLang
+  stack has no adapter path. See docs/LANDSCAPE.md "What changed since Oct 1".
+- Enable "more thinking": it is already at the template maximum (xhigh, reasoning preserved).
 - Spend Carson's money on RunPod without a specific question that a Kaggle commit cannot
   answer (see docs/RUNBOOK_RUNPOD.md for the recipe if that changes).
 - Submit the paper-track entry from this repo (the sibling workspace `arc_prize_2026/` owns it;

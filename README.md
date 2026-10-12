@@ -50,3 +50,5 @@ Our code: MIT-0 (see LICENSE). `harness/ARC3-Inference` is Apache-2.0 (Daniel Fr
 on top of Tufa Labs' MIT Duck harness); `harness/tufa-arc-agi-framework` is MIT (Tufa Labs).
 Model weights and the serving wheelhouse are third-party artefacts under their own licences;
 they are referenced by Kaggle dataset/model id, not vendored.
+
+**Current state and how the automation works: [docs/STATUS.md](docs/STATUS.md).**

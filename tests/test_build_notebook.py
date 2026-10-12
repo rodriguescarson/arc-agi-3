@@ -34,6 +34,28 @@ def test_kernel_metadata_matches_inputs():
     assert cfg["inputs"]["bundle"] in meta["dataset_sources"]
 
 
+def test_model_sources_cover_parts_and_fallback():
+    inputs = {
+        "model_parts": ["o/m/PyTorch/a/1", "o/m/PyTorch/b/1"],
+        "fallback_model": "d/f/Transformers/default/1",
+        "draft": "d/d/Transformers/default/1",
+    }
+    assert build_notebook.model_sources(inputs) == [
+        "o/m/PyTorch/a/1", "o/m/PyTorch/b/1", "d/d/Transformers/default/1", "d/f/Transformers/default/1",
+    ]
+    single = {"model": "d/f/Transformers/default/1", "draft": "d/d/Transformers/default/1"}
+    assert build_notebook.model_sources(single) == ["d/f/Transformers/default/1", "d/d/Transformers/default/1"]
+
+
+def test_every_variant_lists_all_model_inputs():
+    for path in _variants():
+        cfg = json.loads(path.read_text())
+        meta = build_notebook.kernel_metadata(cfg)
+        for ref in list(cfg["inputs"].get("model_parts") or []) + [cfg["inputs"].get("fallback_model")]:
+            if ref:
+                assert ref in meta["model_sources"], f"{path.name}: {ref} missing from model_sources"
+
+
 def test_rendered_env_cell_contains_franzen_settings():
     cfg = json.loads((ROOT / "kaggle" / "variants" / "v1-franzen-faithful.json").read_text())
     env_cell = dict(build_notebook.render_cells(cfg))["00_env.py"]

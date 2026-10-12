@@ -154,6 +154,7 @@ def prepare_draft_view(target, source_root, work_root):
 # ---- validate notebook inputs / identify the offline bundle ----
 MODEL_DIR = str(Path(MODEL_DIR).expanduser().resolve())
 assert Path(MODEL_DIR).is_dir(), f"model dir not found: {MODEL_DIR}"
+CFG.update(__SERVE_CFG__)   # per-variant overrides (kaggle/variants/*.json "serve_cfg")
 assert CFG["CUDAGRAPH_MAXBS"] >= CFG["MAXREQ"], "CUDAGRAPH_MAXBS must cover MAXREQ"
 assert CFG["CHUNK"] > 0 and CFG["CHUNK"] % 64 == 0
 # Refuse to start a second server on an occupied port; do not kill other jobs.
@@ -258,7 +259,7 @@ env.update({
 })
 run([str(Path(CUDA_HOME) / "bin/nvcc"), "--version"], env=env)
 print("Host compiler:", CXX)
-# Report the optional later caching patch. This cell does not modify wheel code.
+# Report the installed stack.
 run([PYTHON, "-c", '''import pathlib, sys, sglang, torch
 print("venv python", sys.version.split()[0], "| sglang", sglang.__version__, "| torch", torch.__version__)
 if torch.cuda.is_available():
@@ -266,26 +267,74 @@ if torch.cuda.is_available():
 else:
     print("CUDA unavailable in this session")
 '''], env=env)
+# ---- optional source patch: Gated-DeltaNet loader for packed (GPTQ/AutoRound) in_proj ----
+def patch_gdn_packed_in_proj(text):
+    """Pennyroyal's Qwen3_5GatedDeltaNet re-binds the split-checkpoint loaders (in_proj_qkv+in_proj_z
+    -> in_proj_qkvz, in_proj_b+in_proj_a -> in_proj_ba) only for `weight` and the FP8 scale params,
+    and its split sizes ignore packing.  A checkpoint that quantises the linear-attention projections
+    (Swift-1.5 AutoRound; Intel's leaves them BF16) ships qweight/qzeros/scales/g_idx there, so the
+    tuple shard id would reach the generic loader and fail.  Bind the wrapper to those params too,
+    shrink packed output dims by the pack factor, and copy per-input tensors (g_idx) whole.
+    Raises AssertionError if the anchors are not found exactly once (wrong wheel, or already patched)."""
+    edits = [
+        ('for attr_name in ("weight", "weight_scale_inv", "weight_scale", "input_scale"):',
+         'for attr_name in ("weight", "weight_scale_inv", "weight_scale", "input_scale", "qweight", "qzeros", "scales", "g_idx"):'),
+        ("        # Normal weight / non-block quant tensor\n"
+         "        return [module.output_sizes[idx] for idx in loaded_shard_id]",
+         "        # Normal weight / non-block quant tensor; packed (GPTQ/AutoRound) output dims shrink by the pack factor\n"
+         "        sizes = [module.output_sizes[idx] for idx in loaded_shard_id]\n"
+         "        packed_dim = getattr(param, \"packed_dim\", None)\n"
+         "        if packed_dim is not None and packed_dim == getattr(param, \"output_dim\", 0):\n"
+         "            factor = getattr(param, \"pack_factor\", None) or getattr(param, \"packed_factor\", None) or 1\n"
+         "            sizes = [int(size // factor) for size in sizes]\n"
+         "        return sizes"),
+        ("            if isinstance(loaded_shard_id, tuple):\n"
+         "                split_sizes = cls._get_split_sizes_for_param(",
+         "            if isinstance(loaded_shard_id, tuple):\n"
+         "                if not hasattr(param, \"output_dim\"):\n"
+         "                    # per-input tensors (g_idx) are shared by every output shard\n"
+         "                    return original_weight_loader(param, loaded_weight, None)\n"
+         "                split_sizes = cls._get_split_sizes_for_param("),
+    ]
+    for old, _ in edits:
+        assert text.count(old) == 1, f"patch anchor not found exactly once: {old[:60]!r}"
+    for old, new in edits:
+        text = text.replace(old, new)
+    return text
+
+
+if CFG.get("PATCH_GDN_PACKED_IN_PROJ") and not CPU_SMOKE:
+    sglang_dir = subprocess.run([PYTHON, "-c", "import sglang, os; print(os.path.dirname(sglang.__file__))"],
+                                capture_output=True, text=True, check=True, env=env).stdout.strip()
+    target = Path(sglang_dir, "srt", "models", "qwen3_5.py")
+    try:
+        target.write_text(patch_gdn_packed_in_proj(target.read_text()))
+        print("patched Gated-DeltaNet packed in_proj loader:", target)
+    except AssertionError as exc:
+        print("GDN packed in_proj patch NOT applied (server will run unpatched):", exc)
+
 if CPU_SMOKE:
     print("cpu smoke: wheelhouse installed under", PYTHON, "- skipping the model server")
 
 # ---- validate target, create the draft view, launch the server (GPU only) ----
-def _launch_server():
-    global DRAFT_VIEW, proc
-    target_cfg = json.loads(Path(MODEL_DIR, "config.json").read_text())
+def _launch_server(model_dir):
+    """Launch SGLang on `model_dir`; returns "ready", "crashed" or "deadline"."""
+    global DRAFT_VIEW, proc, ACTIVE_MODEL_DIR
+    ACTIVE_MODEL_DIR = model_dir
+    target_cfg = json.loads(Path(model_dir, "config.json").read_text())
     q = target_cfg.get("quantization_config", {})
-    assert q.get("quant_method") == "auto-round" and q.get("bits") == 4, "MODEL_DIR must be the Intel/albucino AutoRound INT4 checkpoint"
-    _, target_shards = indexed_shards(MODEL_DIR)
-    print("Target:", MODEL_DIR, "| shards:", len(target_shards), "| PLE dtype:", target_cfg.get("text_config", {}).get("ple_embedding_dtype", "checkpoint default (typically BF16)"))
+    assert q.get("quant_method") == "auto-round" and q.get("bits") == 4, "model dir must be an AutoRound INT4 (W4A16) checkpoint"
+    _, target_shards = indexed_shards(model_dir)
+    print("Target:", model_dir, "| shards:", len(target_shards), "| PLE dtype:", target_cfg.get("text_config", {}).get("ple_embedding_dtype", "checkpoint default (typically BF16)"))
     DRAFT_VIEW = None
     if CFG["SPEC"]:
         assert Path(DRAFT_MODEL_DIR).is_dir(), f"draft dir not found: {DRAFT_MODEL_DIR}"
-        DRAFT_VIEW = prepare_draft_view(MODEL_DIR, DRAFT_MODEL_DIR, PREFIX)
+        DRAFT_VIEW = prepare_draft_view(model_dir, DRAFT_MODEL_DIR, PREFIX)
 
     # ---- assemble Pennyroyal / AutoRound launch arguments ----
     graph_bs = sorted({1, 2, 4, 7, 8, 9, 10, CFG["MAXREQ"], CFG["CUDAGRAPH_MAXBS"]})
     graph_bs = [n for n in graph_bs if n <= CFG["CUDAGRAPH_MAXBS"]]
-    args = [SGLANG, "serve", "--model-path", MODEL_DIR, "--load-format", "safetensors",
+    args = [SGLANG, "serve", "--model-path", model_dir, "--load-format", "safetensors",
         "--model-loader-extra-config", '{"enable_multithread_load":false}',
         "--served-model-name", str(CFG["SERVED_NAME"]), "--host", "127.0.0.1",
         "--port", str(SERVED_MODEL_PORT), "--tensor-parallel-size", "1",
@@ -309,7 +358,7 @@ def _launch_server():
         "--enable-cache-report", "--enable-metrics", "--enable-request-time-stats-logging"]
     if CFG["PREFETCH_CHECKPOINTS"]: args += ["--weight-loader-prefetch-checkpoints"]
     if CFG["DROP_CACHE_AFTER_LOAD"]: args += ["--weight-loader-drop-cache-after-load"]
-    tmpl = Path(MODEL_DIR, "chat_template.jinja")
+    tmpl = Path(model_dir, "chat_template.jinja")
     if tmpl.is_file(): args += ["--chat-template", str(tmpl)]
     if not CFG["AUTOTUNE"]: args += ["--disable-flashinfer-autotune"]
     if CFG["GDN_MTP_CACHE_MODE"]: args += ["--gdn-mtp-cache-mode", CFG["GDN_MTP_CACHE_MODE"]]
@@ -325,11 +374,12 @@ def _launch_server():
             tok = find_unique(WHEELHOUSE_DIR, "hot_tokens_64k.pt", required=False)
             if tok is None: tok = find_unique(WHEELHOUSE_DIR, "flash-next-64k.pt")
             assert sha256(tok) == TOKEN_MAP_SHA, "Wrong FR-Spec map; use the map from the pinned Pennyroyal bundle"
-            assert sha256(Path(MODEL_DIR, "tokenizer.json")) == TOKENIZER_SHA, "Tokenizer differs from the FR-Spec map; set CFG['FRSPEC']=False"
+            assert sha256(Path(model_dir, "tokenizer.json")) == TOKENIZER_SHA, "Tokenizer differs from the FR-Spec map; set CFG['FRSPEC']=False"
             args += ["--speculative-token-map", str(tok)]
 
     # ---- launch detached and wait for health ----
-    precache_model_thread.start()
+    if precache_model_thread.ident is None and model_dir == MODEL_DIR:
+        precache_model_thread.start()
     print("\n" + shlex.join(args) + "\n")
     log_offset = Path(LOG).stat().st_size if Path(LOG).exists() else 0
     with open(LOG, "ab", buffering=0) as logf:
@@ -347,23 +397,32 @@ def _launch_server():
     while time.time() - NOTEBOOK_START_TIME < SERVER_STARTUP_TIMEOUT:
         if proc.poll() is not None:
             show_log_tail()
-            break
+            print(f"\nSERVER EXITED with code {proc.returncode} after {int(time.time()-t0)}s")
+            return "crashed"
         try:
             with urllib.request.urlopen(url, timeout=5) as r:
                 if r.status == 200:
                     print(f"\nREADY after {int(time.time()-t0)}s -> {url.replace('/health','/v1')}")
-                    break
+                    return "ready"
         except Exception:
             pass
         elapsed = int(time.time()-t0)
         if elapsed-last_report >= 30:
             print(f"  {elapsed}s ...", flush=True); last_report=elapsed
         time.sleep(3)
-    else:
-        print(f"\nDEADLINE at {int(time.time()-NOTEBOOK_START_TIME)}s from notebook start; "
-              f"releasing the benchmark with the server still loading")
+    print(f"\nDEADLINE at {int(time.time()-NOTEBOOK_START_TIME)}s from notebook start; "
+          f"releasing the benchmark with the server still loading")
+    return "deadline"
 
+
+ACTIVE_MODEL_DIR = MODEL_DIR
+SERVER_STATUS = "skipped"
 if CPU_SMOKE:
     print('cpu smoke: server launch skipped')
 else:
-    _launch_server()
+    SERVER_STATUS = _launch_server(MODEL_DIR)
+    if SERVER_STATUS == "crashed" and FALLBACK_MODEL_DIR:
+        print(f"\nPRIMARY MODEL FAILED TO BOOT; relaunching with the fallback checkpoint {FALLBACK_MODEL_DIR}")
+        SERVER_STATUS = _launch_server(FALLBACK_MODEL_DIR)
+    Path(WORKING_DIR, "served_model.txt").write_text(f"{SERVER_STATUS}\t{ACTIVE_MODEL_DIR}\n")
+    print("server:", SERVER_STATUS, "| model:", ACTIVE_MODEL_DIR)

@@ -7,7 +7,8 @@ Account: `carsonrodrigues` (token in `~/.kaggle/kaggle.json`). CLI: `.venv/bin/k
 | Kaggle ref | built by | contents |
 |---|---|---|
 | `carsonrodrigues/arc3-harness-bundle` | `python kaggle/build_bundle.py --push` | `src/` = `harness/` + Tufa's two pickles |
-| `carsonrodrigues/python312-standalone` | by hand (see kaggle/build/python312) | CPython 3.12.15 install_only tarball |
+| `carsonrodrigues/py312-portable` | by hand (see kaggle/build/python312) | CPython 3.12.15 install_only tarball (`.tgz.bin`) |
+| `phuongncn/arc3-qwen38-swift-w4a16-autoround` (public model, two PyTorch instances `w4a16-a`/`w4a16-b`) | Fususu | verbatim mirror of `ukisai/Swift-1.5-Qwen3.8-Flash-Next-W4A16-AutoRound` (177 GB); v3 target, re-assembled into one directory of symlinks by cell 00 (`model_parts`) |
 | `dfranzen/pennyroyal-v253` (public) | Franzen | SGLang Pennyroyal 2.5.3 cp312 wheelhouse |
 | `dfranzen/intel-qwen3.8-flash-next-w4a16-autoround` (public model) | Franzen | target weights, 17 shards |
 | `dfranzen/albucino-qwen3-8-flash-next-drafter` (public model) | Franzen | MTP draft |
@@ -33,6 +34,17 @@ except the model server and costs no quota.
 `--push` is a *commit* (Save & Run All). On the RTX Pro 6000 it waits in a queue that has
 been 8 h long, then runs the smoke configuration (two public games, ~35 min including the
 ~9 min model load). It consumes the weekly 30 h GPU quota; the scored rerun does not.
+
+Variants: `v1-franzen-faithful`, `v3-swift` (kernel `arc3-duck-v3-swift`), `v2-level-memory`,
+`v4-effort-medium` (kernel `arc3-duck-v4-effort`). CPU checks (no quota): `v1-cpucheck`, `v3-cpucheck`.
+`v3-swift` attaches the Intel checkpoint as `fallback_model`: if the Swift server exits before it is
+healthy, cell 40 relaunches on the Intel checkpoint and writes `served_model.txt` (status + path) to the
+output, so check that file before logging which model a draw came from.
+
+Free source probes: `kaggle/probes/sglang-src-probe/` is a CPU script kernel that unzips the Pennyroyal
+SGLang wheel and prints the loader code paths (used to check Swift's quantised attention layers).
+A variant's `serve_cfg` overrides cell 40's `CFG` (e.g. `PATCH_GDN_PACKED_IN_PROJ`, the Swift loader
+patch; `SPEC`, `FRSPEC`, `MAXREQ`, ...). Server outcome per run: `served_model.txt` in the output.
 
 ## Submit (one per day, 23:59 UTC boundary)
 

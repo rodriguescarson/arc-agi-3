@@ -1328,6 +1328,25 @@ def _reasoning_effort_ladder() -> list[str]:
     return [level.strip() for level in raw.split(",") if level.strip()]
 
 
+_REASONING_EFFORT_LEVELS = ("xhigh", "medium", "low")
+
+
+def _reasoning_effort_default() -> str | None:
+    """Reasoning effort requested on every turn (Qwen3.8 template: xhigh, medium, low).
+
+    Empty (default) leaves the template default in charge, which for Qwen3.8-Flash-Next is
+    xhigh. A lower level trades deliberation per turn for more turns per game; the effort
+    ladder (ARC3_REASONING_EFFORT_LADDER) still overrides this after a truncated generation.
+    Unknown values are ignored rather than sent, because the template raises on them."""
+    raw = os.environ.get("ARC3_REASONING_EFFORT", "").strip().lower()
+    if not raw:
+        return None
+    if raw not in _REASONING_EFFORT_LEVELS:
+        log.warning("ARC3_REASONING_EFFORT=%r is not one of %s; ignored", raw, _REASONING_EFFORT_LEVELS)
+        return None
+    return raw
+
+
 def _preserve_thinking_kwarg() -> bool | None:
     """Value for the `preserve_thinking` chat-template kwarg, or None to omit.
 
@@ -5228,6 +5247,9 @@ class ToolAgent:
         preserve_thinking = _preserve_thinking_kwarg()
         if preserve_thinking is not None:
             kwargs["preserve_thinking"] = preserve_thinking
+        default_effort = _reasoning_effort_default()
+        if default_effort is not None:
+            kwargs["reasoning_effort"] = default_effort
         ladder = _reasoning_effort_ladder()
         rung = getattr(self, "_reasoning_effort_rung", -1)
         if ladder and 0 <= rung < len(ladder):

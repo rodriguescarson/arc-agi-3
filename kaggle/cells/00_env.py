@@ -32,9 +32,11 @@ os.environ["ARC3_HTTP_RETRY_INITIAL_SECONDS"] = "900"
 # ---- attached inputs (all public Kaggle datasets / models) ----
 INPUTS = __INPUTS__
 # e.g. {"wheelhouse": "dfranzen/pennyroyal-v253", "bundle": "carsonrodrigues/arc3-harness-bundle",
-#       "py312": "carsonrodrigues/python312-standalone",
+#       "py312": "carsonrodrigues/py312-portable",
 #       "model": "dfranzen/intel-qwen3.8-flash-next-w4a16-autoround/transformers/default/1",
 #       "draft": "dfranzen/albucino-qwen3-8-flash-next-drafter/transformers/default/1"}
+# A checkpoint split over several model instances uses "model_parts": [ref, ref, ...] instead of
+# "model"; an optional "fallback_model" is served if the primary never becomes healthy.
 
 
 def _resolve_input(ref: str, *, model: bool = False, required: bool = True) -> str:
@@ -59,13 +61,42 @@ def _resolve_input(ref: str, *, model: bool = False, required: bool = True) -> s
     return ""
 
 
+def _merged_model_view(refs: list[str], view: Path) -> str:
+    """A checkpoint uploaded as several Kaggle model instances (50-file limit per instance) is
+    re-assembled as one directory of symlinks, so the loader sees a single HF-layout checkpoint."""
+    parts = [Path(_resolve_input(ref, model=True)) for ref in refs]
+    shutil.rmtree(view, ignore_errors=True)
+    view.mkdir(parents=True, exist_ok=True)
+    linked = 0
+    for part in parts:
+        for src in sorted(part.rglob("*")):
+            if not src.is_file():
+                continue
+            dest = view / src.relative_to(part)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists() or dest.is_symlink():
+                raise RuntimeError(f"duplicate file across model parts: {src.relative_to(part)}")
+            dest.symlink_to(src.resolve())
+            linked += 1
+    for required in ("config.json", "model.safetensors.index.json", "tokenizer.json"):
+        assert (view / required).exists(), f"merged model view lacks {required}; parts={parts}"
+    print(f"merged {len(parts)} model parts into {view}: {linked} files")
+    return str(view)
+
+
 WHEELHOUSE_DIR = _resolve_input(INPUTS["wheelhouse"])
-MODEL_DIR = _resolve_input(INPUTS["model"], model=True)
+if INPUTS.get("model_parts"):
+    MODEL_DIR = _merged_model_view(list(INPUTS["model_parts"]), Path("/kaggle/arc3-model-view"))
+else:
+    MODEL_DIR = _resolve_input(INPUTS["model"], model=True)
+# Optional second checkpoint: if the primary server never becomes healthy, cell 40 relaunches
+# with this one so the day's submission slot still produces a real run.
+FALLBACK_MODEL_DIR = _resolve_input(INPUTS.get("fallback_model", ""), model=True, required=False)
 DRAFT_MODEL_DIR = _resolve_input(INPUTS["draft"], model=True)
 BUNDLE_SOURCE_DIR = _resolve_input(INPUTS["bundle"])
 PY312_DATASET_DIR = _resolve_input(INPUTS["py312"], required=False)
 SERVED_MODEL_NAME = __SERVED_MODEL_NAME__
-print({"wheelhouse": WHEELHOUSE_DIR, "model": MODEL_DIR, "draft": DRAFT_MODEL_DIR, "bundle": BUNDLE_SOURCE_DIR, "py312": PY312_DATASET_DIR})
+print({"wheelhouse": WHEELHOUSE_DIR, "model": MODEL_DIR, "fallback_model": FALLBACK_MODEL_DIR, "draft": DRAFT_MODEL_DIR, "bundle": BUNDLE_SOURCE_DIR, "py312": PY312_DATASET_DIR})
 
 # ---- the harness source bundle: copy to a writable location ----
 BUNDLE_DIR = Path("/kaggle/arc3-bundle")

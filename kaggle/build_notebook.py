@@ -56,6 +56,7 @@ def tokens(cfg: dict) -> dict[str, str]:
         "__SETUP_ENV__": literal(cfg["setup_env"]),
         "__PRIORITY_ENV__": literal(cfg.get("priority_env", {})),
         "__SOLVER__": literal(cfg["solver"]),
+        "__SERVE_CFG__": literal(cfg.get("serve_cfg", {})),
     }
 
 
@@ -96,7 +97,8 @@ def notebook(cfg: dict, cells: list[tuple[str, str]]) -> dict:
         f"Variant `{cfg['variant']}`, built from `rodriguescarson/arc-agi-3` @ `{_git_rev()}`.\n\n"
         "Built on **Daniel Franzen's Milestone 2 solution** (Apache-2.0, "
         "https://github.com/da-fr/arc-agi-3-solution) which builds on **Tufa Labs' Duck harness** "
-        "(MIT, https://github.com/Tufalabs/duck-harness). Model: Qwen3.8-Flash-Next (Intel AutoRound W4A16) "
+        "(MIT, https://github.com/Tufalabs/duck-harness). Model: "
+        f"{cfg.get('model_label', 'Qwen3.8-Flash-Next (Intel AutoRound W4A16)')} "
         "with Albucino's MTP draft, served by SGLang Pennyroyal 2.5.3 from Franzen's public wheelhouse. "
         "Third-party code and weights remain under their own licences.\n\n"
         f"Notes: {cfg.get('notes', '')}\n\n"
@@ -125,6 +127,18 @@ def notebook(cfg: dict, cells: list[tuple[str, str]]) -> dict:
     }
 
 
+def model_sources(inputs: dict) -> list[str]:
+    """Every Kaggle model instance the notebook must mount: the target (one ref or several
+    `model_parts`), the MTP draft, and the optional fallback target."""
+    refs = [inputs.get("model")] + list(inputs.get("model_parts") or []) + [inputs["draft"], inputs.get("fallback_model")]
+    out: list[str] = []
+    for ref in refs:
+        if ref and ref not in out:
+            out.append(ref)
+    assert inputs.get("model") or inputs.get("model_parts"), "variant needs inputs.model or inputs.model_parts"
+    return out
+
+
 def kernel_metadata(cfg: dict) -> dict:
     inputs = cfg["inputs"]
     _, shape = accelerator(cfg)
@@ -143,7 +157,7 @@ def kernel_metadata(cfg: dict) -> dict:
         "dataset_sources": [ref for ref in (inputs["wheelhouse"], inputs["bundle"], inputs.get("py312")) if ref],
         "kernel_sources": [],
         "competition_sources": [COMPETITION],
-        "model_sources": [inputs["model"], inputs["draft"]],
+        "model_sources": model_sources(inputs),
     }
     if shape:
         meta["machine_shape"] = shape

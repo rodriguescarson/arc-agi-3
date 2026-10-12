@@ -64,7 +64,7 @@ def test_pre_start_test_submission_waits_then_fires_once():
     out = daily.tick(PLAN, state, fake, T("2026-10-12T10:00:00"))
     assert kinds(out) == ["note", "note", "note"] and not fake.subs
     fake.now = T("2026-10-13T00:20:00")
-    daily.tick(PLAN, state, fake, fake.now)
+    out = daily.tick(PLAN, state, fake, fake.now)
     assert "submit" in kinds(out) and fake.subs[-1].description == "arc3-auto test=cpu-test kernel=me/arc3-duck-v3-cpucheck version=1"
     out = daily.tick(PLAN, state, fake, T("2026-10-13T06:20:00"))
     assert "submit" not in kinds(out) and len(fake.subs) == 1
@@ -136,7 +136,7 @@ def test_errored_submission_does_not_count_and_variant_is_retried():
     state["pushes"] = [{"at": "2026-10-16T20:00:00+00:00", "variant": "v1-franzen-faithful", "version": 2, "kernel": kernel}]
     fake.subs.append(daily.Submission(T("2026-10-17T00:30:00"), f"arc3-auto variant=v1-franzen-faithful kernel={kernel} version=2 rev=x", "ERROR", None))
     fake.now = T("2026-10-17T02:20:00")
-    daily.tick(PLAN, state, fake, fake.now)
+    out = daily.tick(PLAN, state, fake, fake.now)
     assert "submit" in kinds(out) and fake.subs[-1].parsed["variant"] == "v1-franzen-faithful"
 
 

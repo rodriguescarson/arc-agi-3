@@ -1,0 +1,19 @@
+{
+  "competition": "arc-prize-2026-arc-agi-3",
+  "owner": "carsonrodrigues",
+  "submission_file": "submission.parquet",
+  "start_utc": "2026-10-17T00:05:00Z",
+  "freeze_utc": "2026-10-31T00:00:00Z",
+  "end_utc": "2026-11-02T22:30:00Z",
+  "order": ["v1-franzen-faithful", "v3-swift", "v2-level-memory", "v4-effort-medium"],
+  "push_retry_hours": 20,
+  "pre_start_tests": [
+    {
+      "label": "v3-cpucheck-pipeline",
+      "kernel": "carsonrodrigues/arc3-duck-v3-cpucheck",
+      "version": 1,
+      "not_before": "2026-10-13T00:05:00Z",
+      "why": "zero-score CPU notebook: exercises the submit API, the competition rerun of our cells in TRUE_SUBMISSION mode, and the scoring pipeline before any GPU quota exists"
+    }
+  ]
+}

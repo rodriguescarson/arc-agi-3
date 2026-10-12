@@ -43,7 +43,8 @@ previous draws minus 1 SD **and** the run log shows the mechanism did what it wa
 - Oct 12-16: no GPU commits possible (quota refreshes Oct 17 00:00 UTC). Use the days for the CPU
   pipeline check, v2/v3 preparation, and (if Carson approves the spend) one RunPod validation of
   v1 boot + throughput.
-- Oct 17: commit v1 at 00:00 UTC, submit the moment it completes; commit v2 the same day.
+- Oct 13: automated zero-score test submission (CPU notebook) to prove the submit + rerun path.
+- Oct 17: the bot commits v1 at 00:15 UTC, submits it when complete, and pre-commits v3 the same day (`.github/workflows/daily-submit.yml`).
 - Oct 18 - Nov 2: one submission per day, alternating the best-known config with one new
   mechanism; freeze on Oct 31 and spend the last two days re-submitting the best config.
 

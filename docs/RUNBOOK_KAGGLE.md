@@ -46,7 +46,32 @@ SGLang wheel and prints the loader code paths (used to check Swift's quantised a
 A variant's `serve_cfg` overrides cell 40's `CFG` (e.g. `PATCH_GDN_PACKED_IN_PROJ`, the Swift loader
 patch; `SPEC`, `FRSPEC`, `MAXREQ`, ...). Server outcome per run: `served_model.txt` in the output.
 
-## Submit (one per day, 23:59 UTC boundary)
+## Automation (default from 2026-10-13): `.github/workflows/daily-submit.yml`
+
+`kaggle/daily.py tick` runs every two hours on GitHub Actions (secrets `KAGGLE_USERNAME` /
+`KAGGLE_KEY`; schedule in `kaggle/plan.json`). It submits one kernel version per UTC day and keeps
+one commit in flight so the next variant is complete before midnight:
+
+1. **Before `start_utc` (2026-10-17 00:05 UTC):** only the `pre_start_tests` (the zero-score
+   `arc3-duck-v3-cpucheck` v1 on 2026-10-13) to prove the submit call, the competition rerun of our
+   cells and the scoring pipeline.
+2. **Order phase:** `order` = v1, v3, v2, v4. The first tick of a UTC day submits the target's latest
+   COMPLETE version (message `arc3-auto variant=... kernel=... version=... rev=...`), then pushes the
+   next variant (Save & Run All, smoke config, ~35 min of GPU quota).
+3. **Best phase (order done, or after `freeze_utc`):** re-submit the variant with the best public
+   score; completed versions are reused, so no further pushes unless a variant file changes.
+
+Reads come from Kaggle (submissions, scores, kernel status). Which version belongs to which variant
+and when a push was last tried is kept in `state.json` on the `automation/state` branch (never main).
+A push or submit failure after the start date fails the job, so GitHub emails the failure. Check
+`Actions -> daily-submit` job summaries, or run `python kaggle/daily.py report`. Manual pushes to the
+`arc3-duck-*` kernels would confuse the "latest version" bookkeeping: let the bot own them, or edit
+the state branch.
+
+Dry run: `gh workflow run daily-submit.yml -f dry_run=true`, or locally
+`PYTHONPATH=. .venv/bin/python kaggle/daily.py tick --dry-run --now 2026-10-17T00:20:00Z`.
+
+## Submit by hand (fallback; one per day, 23:59 UTC boundary)
 
 1. Wait for status `complete`.
 2. Open https://www.kaggle.com/code/carsonrodrigues/arc3-duck-v1, pick the version, click

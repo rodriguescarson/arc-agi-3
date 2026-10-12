@@ -164,12 +164,9 @@ def kernel_metadata(cfg: dict) -> dict:
     return meta
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("variant", type=Path)
-    ap.add_argument("--push", action="store_true")
-    args = ap.parse_args()
-    cfg = json.loads(args.variant.read_text())
+def build(variant_path: Path) -> tuple[Path, dict]:
+    """Render a variant into kaggle/build/<variant>/; returns (out_dir, cfg)."""
+    cfg = json.loads(variant_path.read_text())
     cells = render_cells(cfg)
     check_cells(cells)
     out = ROOT / "kaggle" / "build" / cfg["variant"]
@@ -178,13 +175,39 @@ def main() -> None:
     (out / "kernel-metadata.json").write_text(json.dumps(kernel_metadata(cfg), indent=2) + "\n")
     (out / "variant.json").write_text(json.dumps(cfg, indent=2) + "\n")
     print(f"built {out}  ({len(cells)} code cells, git {_git_rev()})")
+    return out, cfg
+
+
+def kaggle_bin() -> str:
+    import shutil
+    venv = ROOT / ".venv" / "bin" / "kaggle"
+    return str(venv) if venv.exists() else (shutil.which("kaggle") or "kaggle")
+
+
+def push(out: Path, cfg: dict) -> int:
+    """`kaggle kernels push` for a built variant (a Save & Run All commit); returns the new version number."""
+    import re
+    cmd = [kaggle_bin(), "kernels", "push", "-p", str(out)]
+    if accelerator(cfg)[1]:
+        cmd += ["--accelerator", accelerator(cfg)[1]]
+    print("$", " ".join(cmd))
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    text = (proc.stdout or "") + (proc.stderr or "")
+    print(text.strip())
+    match = re.search(r"Kernel version (\d+) successfully pushed", text)
+    if proc.returncode != 0 or not match:
+        raise RuntimeError(f"kernel push failed: {text.strip()[-400:]}")
+    return int(match.group(1))
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("variant", type=Path)
+    ap.add_argument("--push", action="store_true")
+    args = ap.parse_args()
+    out, cfg = build(args.variant)
     if args.push:
-        kaggle = ROOT / ".venv" / "bin" / "kaggle"
-        cmd = [str(kaggle), "kernels", "push", "-p", str(out)]
-        if accelerator(cfg)[1]:
-            cmd += ["--accelerator", accelerator(cfg)[1]]
-        print("$", " ".join(cmd))
-        subprocess.run(cmd, check=True)
+        print("version", push(out, cfg))
 
 
 if __name__ == "__main__":

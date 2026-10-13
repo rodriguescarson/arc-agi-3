@@ -5,15 +5,22 @@
   "start_utc": "2026-10-17T00:05:00Z",
   "freeze_utc": "2026-10-31T00:00:00Z",
   "end_utc": "2026-11-02T22:30:00Z",
-  "order": ["v1-franzen-faithful", "v3-swift", "v2-level-memory", "v4-effort-medium"],
+  "order": [
+    "v3-swift",
+    "v1-franzen-faithful",
+    "v2-level-memory",
+    "v4-effort-medium",
+    "v6-swift-level-memory"
+  ],
   "push_retry_hours": 20,
   "pre_start_tests": [
     {
       "label": "v3-cpucheck-pipeline",
       "kernel": "carsonrodrigues/arc3-duck-v3-cpucheck",
       "version": 1,
-      "not_before": "2026-10-13T00:05:00Z",
-      "why": "zero-score CPU notebook: exercises the submit API, the competition rerun of our cells in TRUE_SUBMISSION mode, and the scoring pipeline before any GPU quota exists"
+      "not_before": "2026-10-16T12:00:00Z",
+      "why": "zero-score CPU notebook: exercises the submit API, the competition rerun of our cells in TRUE_SUBMISSION mode, and the scoring pipeline before any GPU quota exists Deferred to Oct 16 12:00 UTC so it never races the paper-track session's planned ablation submissions on Oct 14-16; it runs only if that day's slot is still free."
     }
-  ]
+  ],
+  "max_in_flight": 2
 }

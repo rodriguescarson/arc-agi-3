@@ -42,4 +42,4 @@ def test_only_the_swift_variant_enables_the_patch():
     for path in sorted((ROOT / "kaggle" / "variants").glob("*.json")):
         cfg = json.loads(path.read_text())
         enabled = bool(cfg.get("serve_cfg", {}).get("PATCH_GDN_PACKED_IN_PROJ"))
-        assert enabled == (cfg["variant"] == "v3-swift"), path.name
+        assert enabled == (cfg["variant"] in {"v3-swift", "v6-swift-level-memory"}), path.name

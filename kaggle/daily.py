@@ -244,12 +244,13 @@ def tick(plan: dict, state: dict, client, now: datetime, dry_run: bool = False) 
             out.failed = True
             return False
 
-    def do_push(variant: str) -> None:
+    def do_push(variant: str) -> bool:
+        """Push a variant; returns False if the push errored (recorded in state)."""
         a = Action("push", f"{variant}", variant)
         if dry_run:
             a.text = "(dry-run) push " + variant
             out.actions.append(a)
-            return
+            return True
         record = {"at": now.isoformat(), "variant": variant, "version": None, "error": None}
         try:
             record["version"] = client.push(variant)
@@ -261,6 +262,7 @@ def tick(plan: dict, state: dict, client, now: datetime, dry_run: bool = False) 
             out.actions.append(Action("failure", f"push {variant}: {record['error']}"))
             out.failed = now >= start
         state["pushes"].append(record)
+        return record["error"] is None
 
     # ---- before the start date: only the pre-start tests ----
     if now < start:
@@ -334,8 +336,7 @@ def tick(plan: dict, state: dict, client, now: datetime, dry_run: bool = False) 
         if in_flight >= max_in_flight:
             out.note(f"{variant}: needs a push; {in_flight} commits already in flight")
             break
-        do_push(variant)
-        if state["pushes"][-1].get("error"):
+        if not do_push(variant):
             out.note("push failed; the remaining pushes wait for the next tick")
             break
         in_flight += 1

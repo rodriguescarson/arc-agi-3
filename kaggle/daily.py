@@ -141,6 +141,22 @@ class KaggleClient:
         out, cfg = build_notebook.build(VARIANTS_DIR / f"{variant}.json")
         return build_notebook.push(out, cfg)
 
+    def served_model(self, kernel: str, version: int) -> str:
+        """Which checkpoint the version's commit served: swift / intel / unknown. Read from
+        served_model.txt in that version's output (written by cell 40). A load failure is
+        deterministic, so the scored rerun of the same version serves the same model."""
+        import tempfile
+
+        import build_notebook
+
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = subprocess.run([build_notebook.kaggle_bin(), "kernels", "output", f"{kernel}/{version}", "-p", tmp,
+                                   "--file-pattern", "served_model.txt"], capture_output=True, text=True)
+            path = Path(tmp) / "served_model.txt"
+            if proc.returncode != 0 or not path.exists():
+                return "unknown"
+            return classify_served_model(path.read_text())
+
     def submit(self, competition: str, kernel: str, version: int, file_name: str, message: str) -> str:
         import build_notebook
 
@@ -153,6 +169,25 @@ class KaggleClient:
         return text
 
 
+def classify_served_model(text: str) -> str:
+    """'ready\t/kaggle/arc3-model-view' -> swift (the merged multi-part Swift view);
+    an Intel checkpoint path -> intel; anything else (crashed, deadline) -> unknown."""
+    status, _, path = (text or "").strip().partition("\t")
+    if status != "ready":
+        return "unknown"
+    low = path.lower()
+    if "arc3-model-view" in low or "swift" in low:
+        return "swift"
+    if "intel" in low:
+        return "intel"
+    return "unknown"
+
+
+def expects_swift(variant: str) -> bool:
+    cfg = json.loads((VARIANTS_DIR / f"{variant}.json").read_text())
+    return bool(cfg["inputs"].get("model_parts"))
+
+
 # ----------------------------------------------------------------------------- decisions
 
 def slot_free(subs: list[Submission], now: datetime) -> tuple[bool, list[Submission]]:
@@ -161,8 +196,27 @@ def slot_free(subs: list[Submission], now: datetime) -> tuple[bool, list[Submiss
     return (not counted), todays
 
 
+def submitted_counts(subs: list[Submission]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for s in subs:
+        p = s.parsed
+        if p and p["variant"] and s.status != "ERROR":
+            counts[p["variant"]] = counts.get(p["variant"], 0) + 1
+    return counts
+
+
 def submitted_variants(subs: list[Submission]) -> set[str]:
-    return {p["variant"] for s in subs if (p := s.parsed) and p["variant"] and s.status != "ERROR"}
+    return set(submitted_counts(subs))
+
+
+def mean_scores(subs: list[Submission]) -> dict[str, tuple[float, int]]:
+    """Per variant: (mean public score, number of scored draws)."""
+    acc: dict[str, list[float]] = {}
+    for s in subs:
+        p = s.parsed
+        if p and p["variant"] and s.public_score is not None:
+            acc.setdefault(p["variant"], []).append(s.public_score)
+    return {v: (sum(x) / len(x), len(x)) for v, x in acc.items()}
 
 
 def best_scores(subs: list[Submission]) -> dict[str, float]:
@@ -174,17 +228,36 @@ def best_scores(subs: list[Submission]) -> dict[str, float]:
     return best
 
 
-def candidates(plan: dict, subs: list[Submission], now: datetime) -> list[str]:
-    """Variants in the order they should be submitted: the configured order (unsubmitted first),
-    then the best public score; after the freeze only the best, then the rest as a fallback."""
+def effective_order(plan: dict, subs: list[Submission]) -> list[str]:
+    """plan["order"] after applying plan["swaps"]: each swap replaces variants once
+    `better` beats `than` by more than `margin` in mean public score, both with at
+    least `min_draws` scored draws (e.g. move the next harness change onto the
+    Intel base if Swift turns out worse)."""
     order = list(plan["order"])
-    done = submitted_variants(subs)
-    scores = best_scores(subs)
-    best = max(order, key=lambda v: (scores.get(v, float("-inf")), -order.index(v))) if scores else None
+    means = mean_scores(subs)
+    for swap in plan.get("swaps", []):
+        better, than = means.get(swap["better"]), means.get(swap["than"])
+        need = int(swap.get("min_draws", 2))
+        if better and than and better[1] >= need and than[1] >= need and better[0] > than[0] + float(swap.get("margin", 0)):
+            order = [swap["replace"].get(v, v) for v in order]
+    seen: set[str] = set()
+    return [v for v in order if not (v in seen or seen.add(v))]
+
+
+def candidates(plan: dict, subs: list[Submission], now: datetime) -> list[str]:
+    """Variants in the order they should be submitted: the (swapped) order while a
+    variant has fewer than draws_per_variant draws, then the variant with the best
+    MEAN public score; after the freeze only the best, then the rest as a fallback."""
+    order = effective_order(plan, subs)
+    counts = submitted_counts(subs)
+    draws = int(plan.get("draws_per_variant", 1))
+    means = mean_scores(subs)
+    scored = [v for v in order if v in means]
+    best = max(scored, key=lambda v: (means[v][0], -order.index(v))) if scored else None
     frozen = now >= parse_time(plan["freeze_utc"])
     out: list[str] = []
     if not frozen:
-        out += [v for v in order if v not in done]
+        out += [v for v in order if counts.get(v, 0) < draws]
     if best:
         out.append(best)
     out += [v for v in order if v not in out]
@@ -271,6 +344,9 @@ def tick(plan: dict, state: dict, client, now: datetime, dry_run: bool = False) 
             if already:
                 out.note(f"pre-start test {test['label']} already submitted")
                 continue
+            if now.date() >= start.date():
+                out.note(f"pre-start test {test['label']} skipped: today is the start day, the slot is for a real run")
+                continue
             if now < parse_time(test["not_before"]):
                 out.note(f"pre-start test {test['label']} waits until {test['not_before']}")
                 continue
@@ -304,8 +380,16 @@ def tick(plan: dict, state: dict, client, now: datetime, dry_run: bool = False) 
             rec, status = version_status(variant)
             if rec and status == "COMPLETE":
                 rev = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip() or "unknown"
-                msg = f"{TAG} variant={variant} kernel={rec['kernel']} version={rec['version']} rev={rev}"
+                served = client.served_model(rec["kernel"], rec["version"])
+                msg = f"{TAG} variant={variant} kernel={rec['kernel']} version={rec['version']} rev={rev} model={served}"
                 submitted_now = do_submit(rec["kernel"], rec["version"], msg, variant)
+                if expects_swift(variant) and served != "swift":
+                    # still a valid draw (the fallback is the Intel configuration), but the
+                    # label says so and the failed job sends the alert
+                    out.actions.append(Action("failure", f"{variant} v{rec['version']} served {served}, not Swift: "
+                                              "this draw is an Intel-base draw; see served_model.txt and serve.log"))
+                    out.failed = True
+                    state.setdefault("fallbacks", []).append({"at": now.isoformat(), "variant": variant, "version": rec["version"], "served": served})
                 break
             out.note(f"{variant}: " + (f"{rec['kernel']} v{rec['version']} is {status}" if rec else "no version yet") + "; not submittable")
         if not submitted_now:

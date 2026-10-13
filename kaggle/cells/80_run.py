@@ -81,8 +81,36 @@ if not TRUE_SUBMISSION:
         [["1_0", "1", True, 1]],
         columns=["row_id", "game_id", "end_of_game", "score"],
     ).to_parquet(WORKING_DIR / "submission.parquet", index=False)
+    scores = {}
     try:
         scores = {g.game_run.game_id: g.game_run.final_score for g in bm.games if g.game_run is not None}
         print("smoke scores:", json.dumps(scores, indent=1))
     except Exception as exc:
         print("could not summarise scores:", exc)
+    # Commit telemetry: the scored rerun's logs are never visible, so this commit is the only
+    # place to check that a mechanism fired (which model served, tokens per request, speed).
+    telemetry = {"variant": VARIANT, "smoke_scores": scores,
+                 "served_model": (WORKING_DIR / "served_model.txt").read_text().strip() if (WORKING_DIR / "served_model.txt").exists() else None,
+                 "elapsed_s": round(time.time() - NOTEBOOK_START_TIME)}
+    try:
+        with urlopen(f"http://127.0.0.1:{SERVED_MODEL_PORT}/metrics", timeout=10) as r:
+            raw = r.read().decode(errors="replace")
+        metrics = {}
+        for line in raw.splitlines():
+            if line.startswith("sglang:") and " " in line:
+                name, _, value = line.rpartition(" ")
+                key = name.split("{")[0]
+                if key.endswith(("_total", "_sum", "_count")) or "throughput" in key or "accept" in key or "hit_rate" in key:
+                    try:
+                        metrics[key] = metrics.get(key, 0.0) + float(value)
+                    except ValueError:
+                        pass
+        telemetry["metrics"] = metrics
+        gen = next((v for k, v in metrics.items() if "generation_tokens_total" in k), None)
+        reqs = next((v for k, v in metrics.items() if k.endswith("num_requests_total") or k.endswith("request_count")), None)
+        if gen and reqs:
+            telemetry["generated_tokens_per_request"] = round(gen / reqs, 1)
+    except Exception as exc:
+        telemetry["metrics_error"] = repr(exc)
+    (WORKING_DIR / "telemetry.json").write_text(json.dumps(telemetry, indent=1))
+    print("telemetry:", json.dumps({k: v for k, v in telemetry.items() if k != "metrics"}, indent=1))

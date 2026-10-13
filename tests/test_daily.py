@@ -32,6 +32,7 @@ class Fake:
         self.push_error: str | None = None
         self.submit_error: str | None = None
         self.now = T("2026-10-17T00:20:00")
+        self.served: dict[str, str] = {}
 
     def submissions(self, competition):
         return list(self.subs)
@@ -47,6 +48,9 @@ class Fake:
         self.versions[kernel] = self.versions.get(kernel, 0) + 1
         self.status[kernel] = "QUEUED"
         return self.versions[kernel]
+
+    def served_model(self, kernel, version):
+        return self.served.get(kernel, "swift")
 
     def submit(self, competition, kernel, version, file_name, message):
         if self.submit_error:
@@ -165,3 +169,69 @@ def test_real_plan_and_variants_resolve():
     for v in plan["order"]:
         assert daily.variant_kernel(plan["owner"], v).startswith(plan["owner"] + "/")
     assert plan["pre_start_tests"][0]["kernel"].split("/")[1] == json.loads((ROOT / "kaggle/variants/v3-cpucheck.json").read_text())["kernel_slug"]
+
+
+def _seed_versions(state, fake, variants, status="COMPLETE"):
+    for variant in variants:
+        kernel = daily.variant_kernel("me", variant)
+        state.setdefault("pushes", []).append({"at": "2026-10-15T20:00:00+00:00", "variant": variant, "version": 1, "kernel": kernel})
+        fake.status[kernel] = status
+
+
+def test_two_draws_per_variant_then_best_mean():
+    plan = {**PLAN, "order": ["v6-swift-level-memory", "v2-level-memory"], "draws_per_variant": 2, "pre_start_tests": []}
+    fake, state = Fake(), {}
+    _seed_versions(state, fake, plan["order"])
+    scores = iter([30.0, 22.0, 27.0, 26.0, 0.0])          # v6: 30, 22 (mean 26); v2: 27, 26 (mean 26.5)
+    for day in range(5):
+        fake.now = T("2026-10-17T00:20:00") + timedelta(days=day)
+        daily.tick(plan, state, fake, fake.now)
+        fake.subs[-1].status, fake.subs[-1].public_score = "COMPLETE", next(scores)
+    picked = [s.parsed["variant"] for s in fake.subs]
+    assert picked[:4] == ["v6-swift-level-memory"] * 2 + ["v2-level-memory"] * 2
+    assert picked[4] == "v2-level-memory"                 # best MEAN (26.5), not the single best draw (30)
+
+
+def test_swap_moves_the_next_mechanism_onto_the_better_base():
+    plan = {**PLAN, "order": ["v6-swift-level-memory", "v2-level-memory", "v7-drain-memory"], "draws_per_variant": 2,
+            "swaps": [{"better": "v2-level-memory", "than": "v6-swift-level-memory", "margin": 2.0, "min_draws": 2,
+                       "replace": {"v7-drain-memory": "v7i-drain-memory"}}]}
+    def subs(v6, v2):
+        out = []
+        for variant, values in (("v6-swift-level-memory", v6), ("v2-level-memory", v2)):
+            for x in values:
+                out.append(daily.Submission(T("2026-10-18T00:00:00"), f"arc3-auto variant={variant} kernel=k version=1", "COMPLETE", x))
+        return out
+    assert daily.effective_order(plan, subs([24, 24], [28, 27]))[-1] == "v7i-drain-memory"   # Intel ahead by 3.5
+    assert daily.effective_order(plan, subs([24, 25], [26, 25]))[-1] == "v7-drain-memory"    # within the 2-point margin
+    assert daily.effective_order(plan, subs([24], [30]))[-1] == "v7-drain-memory"            # not enough draws yet
+
+
+def test_fallback_draw_is_labelled_submitted_and_alerts():
+    plan = {**PLAN, "order": ["v6-swift-level-memory"], "pre_start_tests": []}
+    fake, state = Fake(), {}
+    _seed_versions(state, fake, plan["order"])
+    fake.served[daily.variant_kernel("me", "v6-swift-level-memory")] = "intel"
+    out = daily.tick(plan, state, fake, T("2026-10-17T00:20:00"))
+    assert fake.subs[-1].description.endswith("model=intel")
+    assert out.failed and state["fallbacks"][0]["served"] == "intel"
+
+
+def test_classify_served_model():
+    assert daily.classify_served_model("ready\t/kaggle/arc3-model-view\n") == "swift"
+    assert daily.classify_served_model("ready\t/kaggle/input/models/dfranzen/intel-qwen3.8-flash-next-w4a16-autoround/transformers/default/1") == "intel"
+    assert daily.classify_served_model("crashed\t/kaggle/arc3-model-view") == "unknown"
+    assert daily.classify_served_model("") == "unknown"
+
+
+def test_real_plan_swaps_point_at_real_variants():
+    plan = daily.load_plan()
+    for swap in plan.get("swaps", []):
+        for name in [swap["better"], swap["than"], *swap["replace"].keys(), *swap["replace"].values()]:
+            assert (ROOT / "kaggle" / "variants" / f"{name}.json").exists(), name
+
+
+def test_pre_start_test_never_takes_the_start_day_slot():
+    fake, state = Fake(), {}
+    out = daily.tick(PLAN, state, fake, T("2026-10-17T00:02:00"))     # before start_utc 00:05, same UTC day
+    assert not fake.subs and any("start day" in a.text for a in out.actions)

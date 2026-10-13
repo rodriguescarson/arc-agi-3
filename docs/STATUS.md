@@ -23,6 +23,8 @@ Times are IST unless marked UTC. Competition deadlines are UTC.
 2. **LaunchAgent on this Mac** `~/Library/LaunchAgents/com.carson.arc3-daily-submit.plist`: every 2 h while the Mac is awake it runs `gh workflow run daily-submit.yml`. Verified 2026-10-13 01:08 IST (run 38298924033 succeeded). Log: `~/Library/Logs/arc3/daily-submit.log`. Remove with `launchctl bootout gui/$(id -u)/com.carson.arc3-daily-submit`.
 3. **claude.ai routine** "arc3: dispatch daily-submit workflow" (`trig_01YSqbMMHHuCFKzDbZVL32V8`) at 00:20 and 06:20 UTC (05:50 / 11:50 IST) in a cloud session on this repo; it only dispatches the workflow (REST: `gh api -X POST repos/rodriguescarson/arc-agi-3/actions/workflows/daily-submit.yml/dispatches -f ref=main`, because `gh workflow run` needs GraphQL, which that sandbox blocks) and sends a push notification if the run fails. Test fires on 2026-10-13 01:10 and 01:13 IST both queued a run that succeeded.
 
+**Slot race (added 2026-10-13):** the paper-track workspace on the same account submits at about 00:07 UTC, which consumed the Oct 13 slot before our ticks. All three triggers now also fire in the first minute of the UTC day (cron `1 0 * * *`; LaunchAgent at 05:31 and 05:36 IST; routine at 00:01 and 06:01 UTC), so our submission is attempted at ~00:02 UTC. The proper fix is one automation per account: Carson decides.
+
 Several dispatches per day are harmless: ticks are idempotent (the slot is checked live on Kaggle) and the workflow's concurrency group queues them.
 
 Timeline the plan encodes:

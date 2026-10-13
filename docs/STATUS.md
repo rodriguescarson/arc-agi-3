@@ -7,7 +7,7 @@ Times are IST unless marked UTC. Competition deadlines are UTC.
 
 | item | state |
 |---|---|
-| Repo | `rodriguescarson/arc-agi-3` (private; make public before the deadline, prize rule). main is protected by convention: all changes via PR. |
+| Repo | `rodriguescarson/arc-agi-3` (private; make public before the deadline, prize rule). All changes via PR. GitHub refuses branch protection and rulesets on a private free-plan repo (HTTP 403 "Upgrade to GitHub Pro or make this repository public"), so the rule is procedural: merge only after the `test` check is green (PR #7 slipped through with a red check; fixed in #8). |
 | Kaggle account | `carsonrodrigues`. One submission per UTC day, shared by every session that uses the account. |
 | GPU quota | exhausted until **2026-10-17 00:00 UTC (05:30 IST)**; keep that week's 30 h for ARC. Each commit ≈ 35 min + an RTX queue of up to 8 h; scored reruns cost no quota. |
 | Submissions so far | 2026-10-12 04:25 UTC: "model-based explorer v7" from the paper-track workspace (`~/Projects/arc_prize_2026`), public 0.15. Nothing from this repo yet. |

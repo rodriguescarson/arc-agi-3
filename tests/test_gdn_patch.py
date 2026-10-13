@@ -42,4 +42,8 @@ def test_only_the_swift_variant_enables_the_patch():
     for path in sorted((ROOT / "kaggle" / "variants").glob("*.json")):
         cfg = json.loads(path.read_text())
         enabled = bool(cfg.get("serve_cfg", {}).get("PATCH_GDN_PACKED_IN_PROJ"))
-        assert enabled == (cfg["variant"] in {"v3-swift", "v6-swift-level-memory"}), path.name
+        # every GPU variant serving the multi-part Swift checkpoint needs the loader patch, and only
+        # those; CPU pipeline checks never start the server
+        if str(cfg.get("accelerator", "")).lower() in {"none", "cpu"}:
+            continue
+        assert enabled == bool(cfg["inputs"].get("model_parts")), path.name

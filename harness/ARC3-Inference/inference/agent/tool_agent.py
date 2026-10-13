@@ -30,6 +30,7 @@ from inference.utils.animation import (
 )
 from inference.agent.action_names import reset_exposed, to_engine_action, to_model_action, undo_exposure_mode
 from inference.utils.retained_functions import function_signature
+from inference.utils.level_memory import compute_solved_levels, format_solved_levels
 from inference.agent.prompts import (
     apply_level_transfer_system_guidance,
     LEVEL_START_USER_PROMPT,
@@ -970,6 +971,86 @@ def _apply_history_image_window(
         result.append(message)
     result.reverse()
     return result
+
+
+def _pin_memory_at_drain() -> bool:
+    """ARC3_PIN_MEMORY_AT_DRAIN=1: when the token trimmer drops history, prepend a
+    frozen "game memory" note to the first retained user message: the completed
+    levels with the winning actions of the attempt that cleared each, and the full
+    source of the retained functions (capped). The retained-function SIGNATURES are
+    already re-announced every turn; what a drain loses is their bodies and the
+    record of how earlier levels were won.
+
+    The note is written once, at the drain, into the stored message, so the
+    prefix stays byte-identical until the next drain drops that message. Off by
+    default."""
+    return _get_env_bool("ARC3_PIN_MEMORY_AT_DRAIN", False)
+
+
+def _pin_memory_max_chars() -> int:
+    return max(500, _get_env_int("ARC3_PIN_MEMORY_MAX_CHARS", 4500))
+
+
+def _drain_image_keep() -> int | None:
+    """ARC3_DRAIN_IMAGE_KEEP=N: at a drain, strip images from every retained message
+    except the N most recent image-bearing ones. ARC3_HISTORY_IMAGE_KEEP does the
+    same on every turn, which moves the cached prefix every turn; this acts only
+    when the prefix is being rebuilt anyway, so later turns reuse it. At 10x
+    upscale an image costs ~400 tokens. Unset = off."""
+    raw = os.environ.get("ARC3_DRAIN_IMAGE_KEEP", "").strip()
+    if not raw:
+        return None
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return None
+
+
+_PINNED_MEMORY_HEADER = "[Game memory, pinned when older turns were trimmed from context]"
+
+
+def _pinned_memory_text(solved_summary: list, function_sources: list[str], max_chars: int) -> str:
+    """Pure: the note _pin_memory_at_drain prepends. Empty when there is nothing to pin.
+    Functions are listed newest first and only whole functions are included; the
+    names that did not fit are still named, so nothing is silently missing."""
+    parts: list[str] = []
+    if solved_summary:
+        parts.append(
+            "Completed levels (actions of the attempt that cleared each, oldest first):\n"
+            + format_solved_levels(solved_summary)
+        )
+    if function_sources:
+        budget = max_chars - sum(len(part) for part in parts)
+        shown: list[str] = []
+        omitted: list[str] = []
+        for source in reversed(function_sources):
+            try:
+                name = function_signature(source)
+            except Exception:
+                continue
+            if len(source) + 1 <= budget:
+                shown.append(source.rstrip())
+                budget -= len(source) + 1
+            else:
+                omitted.append(name)
+        if shown:
+            parts.append(
+                "Your retained functions (already defined in every python call; call them "
+                "directly, redefine one to change it):\n" + "\n\n".join(shown)
+            )
+        if omitted:
+            parts.append("Also retained, source not shown here: " + ", ".join(omitted) + ".")
+    if not parts:
+        return ""
+    return _PINNED_MEMORY_HEADER + "\n" + "\n\n".join(parts)
+
+
+def _prepend_text_to_message(message: dict[str, Any], text: str) -> dict[str, Any]:
+    """Copy of a user message with `text` placed before its existing content."""
+    content = message.get("content")
+    if isinstance(content, list):
+        return {**message, "content": [{"type": "text", "text": text}, *content]}
+    return {**message, "content": text + "\n\n" + str(content or "")}
 
 
 # Tag for the pair of messages a rolling summary is made of: the request that
@@ -6345,13 +6426,26 @@ class ToolAgent:
             trimmed.pop(0)
         return trimmed
 
+    def _pinned_memory_block(self, state_path: Path | None) -> str:
+        """Never raises: a missing note is acceptable, a crashed turn is not."""
+        try:
+            solved: list = []
+            if state_path is not None:
+                _, history_entries = load_runtime_state(state_path)
+                solved = compute_solved_levels(history_entries or [])
+            sources = list(getattr(self, "_kept_functions", {}).values()) if _persistent_functions() else []
+            return _pinned_memory_text(solved, sources, _pin_memory_max_chars())
+        except Exception as exc:  # noqa: BLE001
+            log.warning("pinned memory note skipped: %s", exc)
+            return ""
+
     def _note_history_evicted(self) -> None:
         # The scheduler consumes the first flag at the next handover. The
         # second stays set so summaries remain visible after history is lost.
         self._context_was_trimmed = True
         self._has_evicted = True
 
-    def _persistent_history_messages(self, messages: list[dict[str, Any]], *, tools: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    def _persistent_history_messages(self, messages: list[dict[str, Any]], *, tools: list[dict[str, Any]] | None = None, state_path: Path | None = None) -> list[dict[str, Any]]:
         original_history = messages[1:]
         if _any_control_pruning_enabled():
             messages = _prune_control_messages(messages)
@@ -6383,6 +6477,16 @@ class ToolAgent:
             if str(previous_message.get("role", "")).strip() == "user":
                 history = [previous_message, *history]
         history = self._drop_until_first_user_message(history)
+        if token_trim_dropped and history:
+            # A drain: the prefix is being rebuilt, so this is the one moment
+            # these edits cost no extra prefill. Both are stored with the history.
+            drain_keep = _drain_image_keep()
+            if drain_keep is not None:
+                history = _apply_history_image_window(history, drain_keep)
+            if _pin_memory_at_drain():
+                note = self._pinned_memory_block(state_path)
+                if note:
+                    history = [_prepend_text_to_message(history[0], note), *history[1:]]
         # Include turn-cap eviction, control pruning and image removal, which
         # can change the cached prefix without the token trimmer dropping any
         # messages. Image removal can leave the message count unchanged.
@@ -7222,7 +7326,7 @@ class ToolAgent:
             if step_executed and not self._wm_absorbed_in_turn:
                 self._turns_without_wm_update += 1
             if preserve_history:
-                self._history_messages = self._persistent_history_messages(messages, tools=self._tools(state_path))
+                self._history_messages = self._persistent_history_messages(messages, tools=self._tools(state_path), state_path=state_path)
             else:
                 self._history_messages = previous_history_messages
             solver_obj = getattr(self._step_env_callback, "__self__", None)

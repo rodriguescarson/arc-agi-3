@@ -32,7 +32,17 @@ So the strategy is not "find a clever trick locally". It is:
 | v5-throughput | REAP-448e NVFP4 target with the NVFP4 draft (rellik13's serving recipe in `data/bundles/sirikilohit-cell11.py`) | frees VRAM for KV; more tokens per game | recipe saved, not ported |
 | v6-scheduler | fewer slots (8) with longer context, or UCB slices | comparison table: fewest slots + longest context scored best | after v5 |
 
-Submission order from Oct 17: **v3, v1, v2, v4, v6 (Swift + level memory)**, then repeat the best public-score draw; Swift first because its fallback is v1. The scheduler never wastes a day: it submits the first variant with a completed version and keeps two commits in flight.
+**Submission order from Oct 17 (revised 2026-10-14 after the external review):** v6 (Swift + level
+memory) x2, v2 (Intel + level memory) x2, v7 (v6 + drain memory) x2, then the variant with the best
+**mean** public score; from Oct 31 only the best. If v2 beats v6 by more than 2 points over two draws
+each, v7 is replaced by v7i (the same mechanism on the Intel base) automatically. No standalone v1, v3
+or v4 draws: v1's distribution is already known from hundreds of public copies (mean 25.77, SD 3.93),
+and v4's global medium effort is unproven and plausibly harmful.
+
+**Final two submissions:** if the best variant's mean beats the runner-up by 3 points or more, pick its
+two highest-scoring runs (the private score is the better of the two, worth about +0.56 SD over one
+run when they are independent). Otherwise pick the best run of each of the top two variants (nearly
+the same order-statistic gain, plus a hedge against one variant not transferring).
 
 Decision rule for keeping a change: it stays if its public draw is >= the running mean of our
 previous draws minus 1 SD **and** the run log shows the mechanism did what it was meant to
@@ -58,3 +68,44 @@ previous draws minus 1 SD **and** the run log shows the mechanism did what it wa
   answer (see docs/RUNBOOK_RUNPOD.md for the recipe if that changes).
 - Submit the paper-track entry from this repo (the sibling workspace `arc_prize_2026/` owns it;
   a real ARC-AGI-3 submission from here makes that entry eligible).
+
+## External review (2026-10-14): what we adopted and what we rejected
+
+We gave `docs/MASTER_BRIEF.md` to an external model. Its direction was sound; several of its factual
+claims about our harness were wrong, so each was checked against the code first.
+
+**Adopted**
+- Bundle and order changes above (v6 first, two draws per variant, best by mean, finals rule).
+- **Drain memory (v7):** at each context drain, a frozen note with the completed levels' winning
+  actions and the source of the retained functions is prepended to the first retained message
+  (`ARC3_PIN_MEMORY_AT_DRAIN`), and images are stripped from all but the 4 newest image-bearing
+  messages (`ARC3_DRAIN_IMAGE_KEEP`). Both act only on the turn the trimmer drops history and are
+  stored with the message, so the prefix stays byte-identical until the next drain (unit-tested).
+  The existing `ARC3_HISTORY_IMAGE_KEEP` was not used because it strips one more image every turn,
+  which moves the cached prefix every turn.
+- **Commit telemetry:** the scored rerun's logs are never visible, so the commit writes
+  `telemetry.json` (served model, SGLang counters, generated tokens per request, smoke scores).
+- **Served-model labelling:** before submitting, the scheduler reads `served_model.txt` from that
+  kernel version's commit output and adds `model=swift|intel|unknown` to the submission message; a
+  Swift variant that served Intel fails the job so GitHub emails an alert.
+
+**Rejected or changed**
+- "Retained functions vanish after a drain and cause NameError loops": wrong. The functions stay
+  callable and their signatures are re-announced in every user message; a drain loses only their
+  bodies and the level record. Expect a smaller gain than the review's +5 to +10.
+- "Fail loud if Swift falls back": would waste a day. v6's fallback is exactly v2 (Intel + level
+  memory), so the draw is valid; we label it and alert instead.
+- "8 streams and 72 Mamba slots are 15 to 18 % faster": no evidence; fewer streams usually lowers
+  aggregate throughput, and Franzen chose 10 after tuning. Not changed without a measurement.
+- "11-minute commits": GPU quota is not binding (about 3 h a week planned) and the 34-minute smoke
+  run is what produces the telemetry needed to judge Swift. Kept.
+- `verify_sim` helper: the sketch did not match our sandbox API, and Franzen found stronger
+  verification hints did not help. Deferred.
+- Level-1 stall demotion (its v8): the diagnosis is partly right (counters are per level, the B term
+  dominates A so depth barely matters, and a game re-prices only at a context trim), but the harness
+  tracks no stall signal yet. Next candidate after v7 data.
+- `click_candidates()` and a strategy-audit prompt: plausible, unmeasured; later candidates.
+- Gated-attention probe for Swift: not needed. Marlin's shape rules hold for every quantised Swift
+  projection (inputs 2,560 or 6,144; outputs 12,288, 512, 10,240, 6,144, 2,560) and the generic QKV
+  loader already handles packed output dims. The fallback and the label cover the rest.
+- The effect sizes in the review are priors, not evidence.

@@ -2,15 +2,13 @@
   "competition": "arc-prize-2026-arc-agi-3",
   "owner": "carsonrodrigues",
   "submission_file": "submission.parquet",
-  "start_utc": "2026-10-17T00:05:00Z",
+  "start_utc": "2026-10-17T00:00:30Z",
   "freeze_utc": "2026-10-31T00:00:00Z",
   "end_utc": "2026-11-02T22:30:00Z",
   "order": [
-    "v3-swift",
-    "v1-franzen-faithful",
+    "v6-swift-level-memory",
     "v2-level-memory",
-    "v4-effort-medium",
-    "v6-swift-level-memory"
+    "v7-drain-memory"
   ],
   "push_retry_hours": 20,
   "pre_start_tests": [
@@ -22,5 +20,18 @@
       "why": "zero-score CPU notebook: exercises the submit API, the competition rerun of our cells in TRUE_SUBMISSION mode, and the scoring pipeline before any GPU quota exists Deferred to Oct 16 12:00 UTC so it never races the paper-track session's planned ablation submissions on Oct 14-16; it runs only if that day's slot is still free."
     }
   ],
-  "max_in_flight": 2
+  "max_in_flight": 2,
+  "draws_per_variant": 2,
+  "swaps": [
+    {
+      "better": "v2-level-memory",
+      "than": "v6-swift-level-memory",
+      "margin": 2.0,
+      "min_draws": 2,
+      "replace": {
+        "v7-drain-memory": "v7i-drain-memory"
+      },
+      "why": "if the Intel base beats Swift by more than 2 points over two draws each, build the next mechanism on Intel"
+    }
+  ]
 }

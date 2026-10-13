@@ -32,6 +32,16 @@ else:
 if CPU_SMOKE:
     import taaf.solver_examples
 
+    # The random solver never touches the LLM agent, so prove here that the bundled agent
+    # imports on this image and that the drain-memory helpers run (no GPU, no model).
+    import inference.agent.tool_agent as _agent
+    _note = _agent._pinned_memory_text(
+        [{"level": 1, "winning_actions": ["ACTION1"], "n_actions": 1, "attempts": 1, "total_actions": 1}],
+        ["def f(x):\n    return x\n"], 4500)
+    assert _note.startswith(_agent._PINNED_MEMORY_HEADER) and "def f(x)" in _note
+    print("cpu smoke: bundled agent imports; drain-memory note OK;",
+          "reasoning-effort knob present:", hasattr(_agent, "_reasoning_effort_default"))
+
     bm.solver = taaf.solver_examples.SolverRandom(
         label="cpu-smoke-random", max_actions_per_game=int(SMOKE.get("cpu_actions", 60)), seed=0
     )

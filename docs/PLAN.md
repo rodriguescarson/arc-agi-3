@@ -32,7 +32,7 @@ So the strategy is not "find a clever trick locally". It is:
 | v5-throughput | REAP-448e NVFP4 target with the NVFP4 draft (rellik13's serving recipe in `data/bundles/sirikilohit-cell11.py`) | frees VRAM for KV; more tokens per game | recipe saved, not ported |
 | v6-scheduler | fewer slots (8) with longer context, or UCB slices | comparison table: fewest slots + longest context scored best | after v5 |
 
-Submission order from Oct 17: v1, v3, v2, v4, then repeat the best draw and interleave v5/v6.
+Submission order from Oct 17: **v3, v1, v2, v4, v6 (Swift + level memory)**, then repeat the best public-score draw; Swift first because its fallback is v1. The scheduler never wastes a day: it submits the first variant with a completed version and keeps two commits in flight.
 
 Decision rule for keeping a change: it stays if its public draw is >= the running mean of our
 previous draws minus 1 SD **and** the run log shows the mechanism did what it was meant to

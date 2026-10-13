@@ -3,6 +3,7 @@ name: daily-submit
 # Ticks every two hours; the first tick after 00:00 UTC submits, later ticks push the next variant.
 on:
   schedule:
+    - cron: "1 0 * * *"      # first minute of the UTC day: claim the account's single daily slot
     - cron: "15 */2 * * *"
   workflow_dispatch:
     inputs:

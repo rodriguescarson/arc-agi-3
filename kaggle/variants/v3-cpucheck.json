@@ -2,7 +2,7 @@
   "variant": "v3-cpucheck",
   "kernel_slug": "arc3-duck-v3-cpucheck",
   "title": "arc3 duck v3 cpucheck",
-  "notes": "CPU pipeline check for v3-swift: mounts the two-part Swift-1.5 mirror plus the Intel fallback, builds the merged model view, installs the wheelhouse, plays two games with the offline random solver. No GPU quota.",
+  "notes": "CPU pipeline check for the Swift variants (v6/v7): mounts the two-part Swift mirror plus the Intel fallback, builds the merged model view, installs the wheelhouse, imports the bundled agent and exercises the drain-memory helpers, plays two games with the offline random solver, writes telemetry.json. No GPU quota.",
   "inputs": {
     "wheelhouse": "dfranzen/pennyroyal-v253",
     "bundle": "carsonrodrigues/arc3-harness-bundle",
@@ -60,7 +60,11 @@
     "ARC3_PERSISTENT_FUNCTIONS": "1",
     "ARC3_PERSISTENT_FUNCTIONS_SCOPE": "game",
     "ARC3_PERSISTENT_FUNCTIONS_IMPORTS": "1",
-    "EXPOSE_UNDO": "on"
+    "EXPOSE_UNDO": "on",
+    "ARC3_LEVEL_MEMORY": "1",
+    "ARC3_BAR_GUIDANCE": "budget",
+    "ARC3_PIN_MEMORY_AT_DRAIN": "1",
+    "ARC3_DRAIN_IMAGE_KEEP": "4"
   },
   "priority_env": {
     "ARC3_MAX_ACTIVE_STREAMS": 10,

@@ -80,19 +80,32 @@ def test_slot_used_by_someone_else_blocks_the_test():
     assert "submit" not in kinds(out) and any("free slot" in a.text for a in out.actions)
 
 
-def test_run_phase_pushes_first_then_submits_and_prepushes_next():
+def test_run_phase_pushes_two_then_submits_and_refills():
     fake, state = Fake(), {}
     out = daily.tick(PLAN, state, fake, T("2026-10-17T00:20:00"))
-    assert fake.pushes == ["v1-franzen-faithful"] and "submit" not in kinds(out)
-    out = daily.tick(PLAN, state, fake, T("2026-10-17T02:20:00"))     # still queued: no second push
-    assert fake.pushes == ["v1-franzen-faithful"]
+    assert fake.pushes == ["v1-franzen-faithful", "v3-swift"] and "submit" not in kinds(out)   # two in flight
+    out = daily.tick(PLAN, state, fake, T("2026-10-17T02:20:00"))     # both queued: no third push
+    assert fake.pushes == ["v1-franzen-faithful", "v3-swift"]
     fake.status["me/arc3-duck-v1"] = "COMPLETE"
     fake.now = T("2026-10-17T04:20:00")
-    daily.tick(PLAN, state, fake, fake.now)
+    out = daily.tick(PLAN, state, fake, fake.now)
     assert fake.subs[-1].description.startswith("arc3-auto variant=v1-franzen-faithful kernel=me/arc3-duck-v1 version=1")
-    assert fake.pushes == ["v1-franzen-faithful", "v3-swift"]        # next variant pushed the same tick
+    assert fake.pushes == ["v1-franzen-faithful", "v3-swift", "v2-level-memory"]   # slot refilled to two in flight
     out = daily.tick(PLAN, state, fake, T("2026-10-17T06:20:00"))     # slot used; nothing more today
-    assert "submit" not in kinds(out) and len(fake.subs) == 1 and fake.pushes[-1] == "v3-swift"
+    assert "submit" not in kinds(out) and len(fake.subs) == 1 and len(fake.pushes) == 3
+
+
+def test_errored_version_is_skipped_and_the_day_is_not_wasted():
+    fake, state = Fake(), {}
+    for variant, status in (("v1-franzen-faithful", "ERROR"), ("v3-swift", "COMPLETE")):
+        kernel = daily.variant_kernel("me", variant)
+        state.setdefault("pushes", []).append({"at": "2026-10-15T20:00:00+00:00", "variant": variant, "version": 1, "kernel": kernel})
+        fake.status[kernel] = status
+    fake.now = T("2026-10-17T00:20:00")
+    out = daily.tick(PLAN, state, fake, fake.now)
+    assert fake.subs[-1].parsed["variant"] == "v3-swift"                 # first candidate with a COMPLETE version
+    assert any("not submittable" in a.text for a in out.actions)
+    assert fake.pushes[0] == "v1-franzen-faithful"                       # and the errored one is re-pushed
 
 
 def test_order_then_best_repeats_without_new_pushes():
@@ -119,13 +132,13 @@ def test_order_then_best_repeats_without_new_pushes():
     assert fake.subs[-1].parsed["variant"] == "v3-swift"
 
 
-def test_push_failure_after_start_is_a_failure_and_rate_limited():
+def test_push_failure_after_start_is_a_failure_and_pauses_all_pushes():
     fake, state = Fake(), {}
     fake.push_error = "Maximum weekly GPU quota of 30.00 hours reached"
     out = daily.tick(PLAN, state, fake, T("2026-10-17T00:20:00"))
-    assert out.failed and any(a.kind == "failure" for a in out.actions)
+    assert out.failed and [a.kind for a in out.actions].count("failure") == 1     # one failed push, not four
     out = daily.tick(PLAN, state, fake, T("2026-10-17T02:20:00"))
-    assert not out.failed and any("retry after" in a.text for a in out.actions)   # no hammering
+    assert not out.failed and any("pushes paused" in a.text for a in out.actions)   # no hammering
     out = daily.tick(PLAN, state, fake, T("2026-10-18T00:20:00"))
     assert out.failed                                                                # retried next day
 

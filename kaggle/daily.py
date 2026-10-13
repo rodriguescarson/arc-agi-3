@@ -174,19 +174,30 @@ def best_scores(subs: list[Submission]) -> dict[str, float]:
     return best
 
 
-def choose_target(plan: dict, subs: list[Submission], now: datetime, exclude: set[str] = frozenset()) -> str:
-    """Which variant should be submitted next."""
+def candidates(plan: dict, subs: list[Submission], now: datetime) -> list[str]:
+    """Variants in the order they should be submitted: the configured order (unsubmitted first),
+    then the best public score; after the freeze only the best, then the rest as a fallback."""
     order = list(plan["order"])
-    done = submitted_variants(subs) | set(exclude)
-    frozen = now >= parse_time(plan["freeze_utc"])
-    if not frozen:
-        for v in order:
-            if v not in done:
-                return v
+    done = submitted_variants(subs)
     scores = best_scores(subs)
-    if scores:
-        return max(order, key=lambda v: (scores.get(v, float("-inf")), -order.index(v)))
-    return order[0]
+    best = max(order, key=lambda v: (scores.get(v, float("-inf")), -order.index(v))) if scores else None
+    frozen = now >= parse_time(plan["freeze_utc"])
+    out: list[str] = []
+    if not frozen:
+        out += [v for v in order if v not in done]
+    if best:
+        out.append(best)
+    out += [v for v in order if v not in out]
+    seen: set[str] = set()
+    return [v for v in out if not (v in seen or seen.add(v))]
+
+
+def choose_target(plan: dict, subs: list[Submission], now: datetime, exclude: set[str] = frozenset()) -> str:
+    """Which variant should be submitted next (first candidate not excluded)."""
+    for v in candidates(plan, subs, now):
+        if v not in exclude:
+            return v
+    return plan["order"][0]
 
 
 def latest_push(state: dict, variant: str) -> dict | None:
@@ -196,6 +207,13 @@ def latest_push(state: dict, variant: str) -> dict | None:
 
 def last_attempt(state: dict, variant: str) -> datetime | None:
     stamps = [parse_time(p["at"]) for p in state.get("pushes", []) if p["variant"] == variant]
+    return max(stamps) if stamps else None
+
+
+def last_failed_attempt(state: dict) -> datetime | None:
+    """Most recent push that errored, any variant: quota errors are account-wide, so one failure
+    pauses every push for push_retry_hours instead of burning a tick on each variant."""
+    stamps = [parse_time(p["at"]) for p in state.get("pushes", []) if p.get("error")]
     return max(stamps) if stamps else None
 
 
@@ -266,34 +284,61 @@ def tick(plan: dict, state: dict, client, now: datetime, dry_run: bool = False) 
         out.note("past end_utc; nothing to do")
         return out
 
-    # ---- submit today's variant if a completed version exists ----
-    target = choose_target(plan, subs, now)
-    push_rec = latest_push(state, target)
-    status = client.kernel_status(push_rec["kernel"]) if push_rec else None
-    out.note(f"target {target}: " + (f"{push_rec['kernel']} v{push_rec['version']} is {status}" if push_rec else "no version pushed yet"))
-    submitted_now = False
-    if free and push_rec and status == "COMPLETE":
-        rev = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip() or "unknown"
-        msg = f"{TAG} variant={target} kernel={push_rec['kernel']} version={push_rec['version']} rev={rev}"
-        submitted_now = do_submit(push_rec["kernel"], push_rec["version"], msg, target)
-    elif free and push_rec and status in {"QUEUED", "RUNNING"}:
-        out.note("slot free but the version is still running; next tick")
-    elif free and push_rec:
-        out.note(f"slot free but the latest version ended {status}; a new push is needed")
+    # ---- submit the first candidate that has a COMPLETE version (never waste the day) ----
+    status_cache: dict[str, str] = {}
 
-    # ---- keep the pipeline one day ahead: push the variant that comes next ----
-    exclude = {target} if submitted_now else set()
-    nxt = choose_target(plan, subs, now, exclude=exclude)
-    rec = latest_push(state, nxt)
-    st = client.kernel_status(rec["kernel"]) if rec else None
-    if rec and st in {"COMPLETE", "QUEUED", "RUNNING"} and not (rec is push_rec and status not in {"COMPLETE", "QUEUED", "RUNNING"}):
-        out.note(f"next {nxt}: {rec['kernel']} v{rec['version']} is {st}; no push needed")
+    def version_status(variant: str) -> tuple[dict | None, str | None]:
+        rec = latest_push(state, variant)
+        if not rec:
+            return None, None
+        if rec["kernel"] not in status_cache:
+            status_cache[rec["kernel"]] = client.kernel_status(rec["kernel"])
+        return rec, status_cache[rec["kernel"]]
+
+    ranked = candidates(plan, subs, now)
+    submitted_now = False
+    if free:
+        for variant in ranked:
+            rec, status = version_status(variant)
+            if rec and status == "COMPLETE":
+                rev = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip() or "unknown"
+                msg = f"{TAG} variant={variant} kernel={rec['kernel']} version={rec['version']} rev={rev}"
+                submitted_now = do_submit(rec["kernel"], rec["version"], msg, variant)
+                break
+            out.note(f"{variant}: " + (f"{rec['kernel']} v{rec['version']} is {status}" if rec else "no version yet") + "; not submittable")
+        if not submitted_now:
+            out.note("slot free but no variant has a completed version; nothing submitted")
     else:
-        attempt = last_attempt(state, nxt)
+        out.note("candidates: " + ", ".join(ranked))
+
+    # ---- keep versions ready: push every variant that lacks one, at most max_in_flight at a time ----
+    in_flight = 0
+    for variant in plan["order"]:
+        rec, status = version_status(variant)
+        if rec and status in {"QUEUED", "RUNNING"}:
+            in_flight += 1
+    max_in_flight = int(plan.get("max_in_flight", 2))
+    retry_hours = float(plan.get("push_retry_hours", 20))
+    failed_at = last_failed_attempt(state)
+    if failed_at and now - failed_at < timedelta(hours=retry_hours):
+        out.note(f"pushes paused: last push error at {failed_at:%Y-%m-%d %H:%M} UTC; retry after {retry_hours:g} h")
+        return out
+    for variant in ranked:
+        rec, status = version_status(variant)
+        if rec and status in {"COMPLETE", "QUEUED", "RUNNING"}:
+            continue
+        attempt = last_attempt(state, variant)
         if attempt and now - attempt < timedelta(hours=float(plan.get("push_retry_hours", 20))):
-            out.note(f"next {nxt}: last push attempt {attempt:%Y-%m-%d %H:%M}; retry after {plan.get('push_retry_hours', 20)} h")
-        else:
-            do_push(nxt)
+            out.note(f"{variant}: last push attempt {attempt:%Y-%m-%d %H:%M}; retry after {plan.get('push_retry_hours', 20)} h")
+            continue
+        if in_flight >= max_in_flight:
+            out.note(f"{variant}: needs a push; {in_flight} commits already in flight")
+            break
+        do_push(variant)
+        if state["pushes"][-1].get("error"):
+            out.note("push failed; the remaining pushes wait for the next tick")
+            break
+        in_flight += 1
     return out
 
 

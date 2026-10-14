@@ -69,3 +69,35 @@ def test_rendered_literals_are_python_not_json():
         for name, src in build_notebook.render_cells(cfg):
             for bad in (": true", ": false", ": null", " true,", " false,"):
                 assert bad not in src, f"{path.name}/{name} contains JSON literal {bad!r}"
+
+
+def _smoke_mode_fn():
+    import ast
+
+    cfg = json.loads((ROOT / "kaggle" / "variants" / "v3-cpucheck.json").read_text())
+    source = dict(build_notebook.render_cells(cfg))["00_env.py"]
+    node = next(n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.name == "_smoke_mode")
+    scope: dict = {}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "00_env", "exec"), scope)
+    return scope["_smoke_mode"]
+
+
+def test_smoke_mode_keeps_gpu_variants_on_the_gpu_in_the_rerun():
+    mode = _smoke_mode_fn()
+    gpu, no_gpu = (lambda: True), (lambda: False)
+    # a GPU variant's scored rerun serves the model whatever nvidia-smi says
+    assert mode("gpu", True, no_gpu) == "gpu"
+    assert mode(None, True, no_gpu) == "gpu"
+    # interactive commits fall back to the CPU check only when no GPU is visible
+    assert mode("gpu", False, gpu) == "gpu"
+    assert mode("gpu", False, no_gpu) == "cpu"
+    # a CPU-check variant stays on the CPU path, also in the rerun (a valid ~0 instead of a crash)
+    assert mode("cpu", True, gpu) == "cpu"
+    assert mode("cpu", False, no_gpu) == "cpu"
+
+
+def test_every_gpu_variant_renders_gpu_smoke_mode():
+    for path in _variants():
+        cfg = json.loads(path.read_text())
+        if cfg.get("accelerator", "NvidiaRtxPro6000") != "none":
+            assert str(cfg.get("smoke", {}).get("mode", "gpu")).lower() == "gpu", path.name

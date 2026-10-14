@@ -127,10 +127,20 @@ def _has_gpu() -> bool:
         return False
 
 
-SMOKE_MODE = "gpu" if TRUE_SUBMISSION else str(SMOKE.get("mode", "gpu")).lower()
-if SMOKE_MODE == "gpu" and not TRUE_SUBMISSION and not _has_gpu():
+def _smoke_mode(configured, true_submission, has_gpu) -> str:
+    """A GPU variant always serves the model in the rerun.  A CPU-check variant keeps the CPU
+    path there too, so its scored rerun yields a valid near-zero score instead of crashing."""
+    mode = str(configured or "gpu").lower()
+    if mode == "cpu":
+        return "cpu"
+    if true_submission:
+        return "gpu"
+    return "gpu" if has_gpu() else "cpu"
+
+
+SMOKE_MODE = _smoke_mode(SMOKE.get("mode"), TRUE_SUBMISSION, _has_gpu)
+if SMOKE_MODE == "cpu" and str(SMOKE.get("mode", "gpu")).lower() != "cpu":
     print("WARNING: no GPU visible in an interactive commit; falling back to the cpu pipeline check")
-    SMOKE_MODE = "cpu"
 CPU_SMOKE = SMOKE_MODE == "cpu"
 print("smoke mode:", SMOKE_MODE)
 

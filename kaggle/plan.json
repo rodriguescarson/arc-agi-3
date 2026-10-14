@@ -15,9 +15,9 @@
     {
       "label": "v3-cpucheck-pipeline",
       "kernel": "carsonrodrigues/arc3-duck-v3-cpucheck",
-      "version": 1,
-      "not_before": "2026-10-16T12:00:00Z",
-      "why": "zero-score CPU notebook: exercises the submit API, the competition rerun of our cells in TRUE_SUBMISSION mode, and the scoring pipeline before any GPU quota exists Deferred to Oct 16 12:00 UTC so it never races the paper-track session's planned ablation submissions on Oct 14-16; it runs only if that day's slot is still free."
+      "version": 3,
+      "not_before": "2026-10-14T06:00:00Z",
+      "why": "CPU notebook submitted as a real entry: exercises the submit API and the competition rerun of our cells in TRUE_SUBMISSION mode (gateway, hidden games, submission writing, scoring) with the offline random solver, so the score is about 0. Version 3 keeps the CPU path in the rerun; v1/v2 would have taken the GPU path there and crashed at the libcuda lookup. Moved up to Oct 14 on Carson's request after the paper-track session did not use the slot."
     }
   ],
   "max_in_flight": 2,

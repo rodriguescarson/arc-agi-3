@@ -81,9 +81,17 @@ if not TRUE_SUBMISSION:
         [["1_0", "1", True, 1]],
         columns=["row_id", "game_id", "end_of_game", "score"],
     ).to_parquet(WORKING_DIR / "submission.parquet", index=False)
-    scores = {}
+    def _run_scores(game_runs, live_score, count_actions):
+        """One row per played run.  `bm.games` are the templates (their game_run stays None);
+        the runs live in `bm.game_runs`, and a smoke run cut at the soft end has no final_score,
+        so score the live state the way summary.txt does."""
+        return [{"game_id": r.game_id, "score": round(float(live_score(r)), 4), "state": r.state,
+                 "levels": r.levels_completed, "actions": count_actions(r)} for r in game_runs]
+
+    scores = []
     try:
-        scores = {g.game_run.game_id: g.game_run.final_score for g in bm.games if g.game_run is not None}
+        import taaf.diagnostics as _diag
+        scores = _run_scores(bm.game_runs, _diag._live_score, _diag._count_actions)
         print("smoke scores:", json.dumps(scores, indent=1))
     except Exception as exc:
         print("could not summarise scores:", exc)

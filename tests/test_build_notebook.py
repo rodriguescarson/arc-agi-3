@@ -101,3 +101,22 @@ def test_every_gpu_variant_renders_gpu_smoke_mode():
         cfg = json.loads(path.read_text())
         if cfg.get("accelerator", "NvidiaRtxPro6000") != "none":
             assert str(cfg.get("smoke", {}).get("mode", "gpu")).lower() == "gpu", path.name
+
+
+def test_smoke_scores_come_from_the_played_runs():
+    import ast
+    from types import SimpleNamespace
+
+    cfg = json.loads((ROOT / "kaggle" / "variants" / "v6-swift-level-memory.json").read_text())
+    source = dict(build_notebook.render_cells(cfg))["80_run.py"]
+    node = next(n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.FunctionDef) and n.name == "_run_scores")
+    scope: dict = {}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "80_run", "exec"), scope)
+    runs = [SimpleNamespace(game_id="ls20-1", state="won", levels_completed=7, final_score=1.0, actions_per_level=[3, 4]),
+            SimpleNamespace(game_id="vc33-2", state="playing", levels_completed=1, final_score=None, actions_per_level=[9])]
+    rows = scope["_run_scores"](runs, lambda r: r.final_score if r.final_score is not None else 0.25,
+                                lambda r: sum(r.actions_per_level))
+    assert rows == [
+        {"game_id": "ls20-1", "score": 1.0, "state": "won", "levels": 7, "actions": 7},
+        {"game_id": "vc33-2", "score": 0.25, "state": "playing", "levels": 1, "actions": 9},
+    ]

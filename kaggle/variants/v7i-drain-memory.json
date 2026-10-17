@@ -1,6 +1,6 @@
 {
   "variant": "v7i-drain-memory",
-  "kernel_slug": "arc3-duck-v7i-drain",
+  "kernel_slug": "arc3-duck-v7i-intel-level-memory-drain-memory",
   "title": "arc3 duck v7i (Intel + level memory + drain memory)",
   "notes": "Intel base with level memory, plus two drain-time context mechanisms: at each context drain the first retained message gets a frozen note with the completed levels' winning actions and the source of the retained functions (ARC3_PIN_MEMORY_AT_DRAIN), and images are stripped from all but the 4 newest image-bearing messages (ARC3_DRAIN_IMAGE_KEEP). Both act only when the prefix is rebuilt anyway, so prefix caching between drains is unchanged.",
   "inputs": {

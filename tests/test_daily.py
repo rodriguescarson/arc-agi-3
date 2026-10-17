@@ -90,10 +90,11 @@ def test_run_phase_pushes_two_then_submits_and_refills():
     assert fake.pushes == ["v1-franzen-faithful", "v3-swift"] and "submit" not in kinds(out)   # two in flight
     out = daily.tick(PLAN, state, fake, T("2026-10-17T02:20:00"))     # both queued: no third push
     assert fake.pushes == ["v1-franzen-faithful", "v3-swift"]
-    fake.status["me/arc3-duck-v1"] = "COMPLETE"
+    v1 = daily.variant_kernel("me", "v1-franzen-faithful")
+    fake.status[v1] = "COMPLETE"
     fake.now = T("2026-10-17T04:20:00")
     out = daily.tick(PLAN, state, fake, fake.now)
-    assert fake.subs[-1].description.startswith("arc3-auto variant=v1-franzen-faithful kernel=me/arc3-duck-v1 version=1")
+    assert fake.subs[-1].description.startswith(f"arc3-auto variant=v1-franzen-faithful kernel={v1} version=1")
     assert fake.pushes == ["v1-franzen-faithful", "v3-swift", "v2-level-memory"]   # slot refilled to two in flight
     out = daily.tick(PLAN, state, fake, T("2026-10-17T06:20:00"))     # slot used; nothing more today
     assert "submit" not in kinds(out) and len(fake.subs) == 1 and len(fake.pushes) == 3
@@ -235,3 +236,26 @@ def test_pre_start_test_never_takes_the_start_day_slot():
     fake, state = Fake(), {}
     out = daily.tick(PLAN, state, fake, T("2026-10-17T00:02:00"))     # before start_utc 00:05, same UTC day
     assert not fake.subs and any("start day" in a.text for a in out.actions)
+
+
+def test_every_variant_title_slugs_to_its_kernel_id():
+    """Kaggle slugs a NEW kernel from its title, not from the id in kernel-metadata.json.
+
+    When the two disagree the notebook is created at the title's slug, the push still reports success,
+    and the mismatch only bites a day later when the submit cannot find the kernel it recorded. That is
+    what happened to v6-swift-level-memory and v3-swift on 2026-10-17: both landed at
+    arc3-duck-v6-swift-1-5-level-memory and arc3-duck-v3-swift-1-5-flash-next instead of the ids the
+    plan referred to. The only two variants that had ever submitted cleanly were the cpucheck pair,
+    whose titles happened to slug to their ids.
+    """
+    import json
+    import re
+
+    bad = []
+    for f in sorted(daily.VARIANTS_DIR.glob("*.json")):
+        cfg = json.loads(f.read_text())
+        slug, title = cfg.get("kernel_slug"), cfg.get("title") or ""
+        derived = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+        if slug and derived != slug:
+            bad.append(f"{f.name}: title {title!r} slugs to {derived!r}, not {slug!r}")
+    assert not bad, "titles must slug to their kernel ids:\n  " + "\n  ".join(bad)

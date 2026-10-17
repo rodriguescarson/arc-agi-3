@@ -328,6 +328,19 @@ def tick(plan: dict, state: dict, client, now: datetime, dry_run: bool = False) 
         try:
             record["version"] = client.push(variant)
             record["kernel"] = variant_kernel(plan["owner"], variant)
+            # Kaggle slugs a brand-new kernel from its TITLE, not from the id in kernel-metadata.json.
+            # When the two disagree the notebook is created somewhere else, the push still reports
+            # success, and the mismatch only surfaces a day later when the submit cannot find the
+            # kernel. Check it here, while the tick that caused it is still the one reporting.
+            # A kernel is not always queryable the instant it is pushed, so a failure here is a warning,
+            # never an error: setting record["error"] would pause every push for push_retry_hours over
+            # what is usually just lag. A slug that still does not resolve on the next tick shows up in
+            # that tick's status note.
+            try:
+                client.kernel_status(record["kernel"])
+            except Exception as exc:
+                out.note(f"{variant}: {record['kernel']} not queryable yet ({type(exc).__name__}); "
+                         f"if it is still missing next tick, the title does not slug to the id")
             a.text = f"{variant} -> {record['kernel']} v{record['version']}"
             out.actions.append(a)
         except Exception as exc:  # noqa: BLE001

@@ -1,6 +1,6 @@
 {
   "variant": "v6-swift-level-memory",
-  "kernel_slug": "arc3-duck-v6-swift-lm",
+  "kernel_slug": "arc3-duck-v6-swift-1-5-level-memory",
   "title": "arc3 duck v6 (Swift-1.5 + level memory)",
   "notes": "v3 (Swift-1.5 target, Intel fallback, loader patch) plus v2's harness flags (solved_levels() in the REPL, budget-bar wording). The two cheapest mechanisms combined; submitted after the single-mechanism draws.",
   "inputs": {

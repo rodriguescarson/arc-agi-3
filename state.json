@@ -3,14 +3,16 @@
   {
    "at": "2026-10-17T12:01:49.714492+00:00",
    "error": null,
-   "kernel": "carsonrodrigues/arc3-duck-v6-swift-lm",
+   "kernel": "carsonrodrigues/arc3-duck-v6-swift-1-5-level-memory",
+   "note": "slug differs from the declared id carsonrodrigues/arc3-duck-v6-swift-lm: Kaggle derived it from the title on first push",
    "variant": "v6-swift-level-memory",
    "version": 1
   },
   {
    "at": "2026-10-17T12:01:49.714492+00:00",
    "error": null,
-   "kernel": "carsonrodrigues/arc3-duck-v3-swift",
+   "kernel": "carsonrodrigues/arc3-duck-v3-swift-1-5-flash-next",
+   "note": "slug differs from the declared id carsonrodrigues/arc3-duck-v3-swift: Kaggle derived it from the title on first push",
    "variant": "v3-swift",
    "version": 1
   }

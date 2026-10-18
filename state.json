@@ -43,6 +43,20 @@
       "transient": true,
       "variant": "v3-swift",
       "version": null
+    },
+    {
+      "at": "2026-10-18T08:57:11.041918+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v3-swift-1-5-flash-next",
+      "variant": "v3-swift",
+      "version": 2
+    },
+    {
+      "at": "2026-10-18T08:57:11.041918+00:00",
+      "error": "kernel push failed: Kernel push error: Maximum batch GPU session count of 2 reached.",
+      "transient": true,
+      "variant": "v2-level-memory",
+      "version": null
     }
   ],
   "submissions": [
@@ -52,6 +66,13 @@
       "message": "arc3-auto test=v3-cpucheck-pipeline kernel=carsonrodrigues/arc3-duck-v3-cpucheck version=3",
       "variant": null,
       "version": 3
+    },
+    {
+      "at": "2026-10-18T08:57:11.041918+00:00",
+      "kernel": "carsonrodrigues/arc3-duck-v6-swift-1-5-level-memory",
+      "message": "arc3-auto variant=v6-swift-level-memory kernel=carsonrodrigues/arc3-duck-v6-swift-1-5-level-memory version=2 rev=15dc497 model=swift",
+      "variant": "v6-swift-level-memory",
+      "version": 2
     }
   ]
 }

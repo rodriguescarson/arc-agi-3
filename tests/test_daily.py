@@ -33,6 +33,10 @@ class Fake:
         self.submit_error: str | None = None
         self.now = T("2026-10-17T00:20:00")
         self.served: dict[str, str] = {}
+        self.smoke: dict[str, int | None] = {}      # kernel -> actions played by its smoke run
+
+    def smoke_actions(self, kernel, version):
+        return self.smoke.get(kernel, 50)
 
     def submissions(self, competition):
         return list(self.subs)
@@ -235,3 +239,34 @@ def test_pre_start_test_never_takes_the_start_day_slot():
     fake, state = Fake(), {}
     out = daily.tick(PLAN, state, fake, T("2026-10-17T00:02:00"))     # before start_utc 00:05, same UTC day
     assert not fake.subs and any("start day" in a.text for a in out.actions)
+
+
+def test_zero_action_smoke_is_broken_not_submitted_and_repushed():
+    """2026-10-17: v6 and v3 were COMPLETE on Kaggle, served the model, and played 0 and 1 actions
+    (a SyntaxError in the sandbox bootstrap). Such a version must not take the day's slot."""
+    plan = dict(PLAN, min_smoke_actions=5)
+    fake, state = Fake(), {}
+    for variant in ("v1-franzen-faithful", "v3-swift"):
+        kernel = daily.variant_kernel("me", variant)
+        state.setdefault("pushes", []).append({"at": "2026-10-16T12:00:00+00:00", "variant": variant, "version": 1, "kernel": kernel})
+        fake.status[kernel] = "COMPLETE"
+    fake.smoke["me/arc3-duck-v1"] = 1          # broken
+    fake.smoke["me/arc3-duck-v3-swift"] = 40   # healthy
+    fake.now = T("2026-10-17T10:20:00")
+    out = daily.tick(plan, state, fake, fake.now)
+    assert fake.subs[-1].parsed["variant"] == "v3-swift"                      # the healthy one takes the slot
+    assert out.failed and any("played 1 action" in a.text for a in out.actions)  # and the broken one alerts
+    assert fake.pushes[0] == "v1-franzen-faithful"                            # and is re-pushed (last push > 20 h ago)
+    assert daily.smoke_actions_from_telemetry({"smoke_scores": []}) == 0
+    assert daily.smoke_actions_from_telemetry({"smoke_scores": {}}) is None   # pre-PR-17 CPU checks: unknown, not broken
+    assert daily.smoke_actions_from_telemetry({"smoke_scores": [{"actions": 3}, {"actions": 4}]}) == 7
+
+
+def test_unknown_smoke_telemetry_does_not_block_a_submission():
+    fake, state = Fake(), {}
+    kernel = daily.variant_kernel("me", "v1-franzen-faithful")
+    state.setdefault("pushes", []).append({"at": "2026-10-16T12:00:00+00:00", "variant": "v1-franzen-faithful", "version": 1, "kernel": kernel})
+    fake.status[kernel] = "COMPLETE"
+    fake.smoke[kernel] = None
+    out = daily.tick(dict(PLAN, min_smoke_actions=5), state, fake, T("2026-10-17T10:20:00"))
+    assert fake.subs[-1].parsed["variant"] == "v1-franzen-faithful" and not out.failed

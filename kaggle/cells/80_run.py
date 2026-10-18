@@ -66,7 +66,7 @@ if TRUE_SUBMISSION:
     _wait_for_gateway(os.environ["ARC_BASE_URL"])
     bm.games = _competition_games()
 else:
-    competition_env_files = "/kaggle/input/competitions/arc-prize-2026-arc-agi-3/environment_files"
+    competition_env_files = str(COMPETITION_DIR / "environment_files")
     bm.games = _offline_games(competition_env_files, SMOKE.get("games"))
     total = float(SMOKE.get("total_minutes", 40)) * 60
     soft_end = datetime.fromtimestamp(NOTEBOOK_START_EPOCH) + timedelta(seconds=total)

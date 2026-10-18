@@ -1,4 +1,4 @@
-# What everyone else is doing (ARC-AGI-3, as of 2026-10-12)
+# What everyone else is doing (ARC-AGI-3, as of 2026-10-12; top-3 check 2026-10-18)
 
 ## Leaderboard (public, 55 hidden games)
 
@@ -134,6 +134,31 @@ less wasted actions), not the ones that "scored 2 points higher once".
   `boristown/qwen3-8-flash-next-nvfp4-reap-448e` (REAP-pruned 512->448 experts, frees VRAM),
   `lordhansolo/swift-1-5-qwen3-8-flash-next-nvfp4`, several AutoRound mirrors.
 - Wheelhouse (public dataset): `dfranzen/pennyroyal-v253` (SGLang Pennyroyal 2.5.3, cp312).
+
+## Top 3 and the public forks (checked 2026-10-18)
+
+Board on Oct 18: Tufa Labs 68.91, Yi-Chia Chen 67.49, mtg 50.37; gold line 38.22 (18th).
+
+**The top 3 have published nothing about their entries.** Kaggle accounts: Tufa = `dlorah`,
+Yi-Chia Chen = `threerabbits`, mtg = `michaeltgao`. None has a public ARC dataset, model or notebook
+(threerabbits' public OPD-32B and DFlash models are from a June competition). Tufa's GitHub forks of
+sglang, vllm, flashinfer and transformers are pure mirrors (0 commits ahead of upstream);
+`duck-harness` is unchanged since Jul 1. The ARC Daily Digest (arc.markbarney.net/news) reports
+standings, not methods. Reverse-engineering tools such as REA work on binaries, apps and websites;
+private Kaggle notebooks are out of reach and accessing them would breach Kaggle's terms.
+
+**Every public notebook near the top is a Franzen fork.** Code diffs against his notebook:
+
+| notebook | change | evidence |
+|---|---|---|
+| shiiin9 "31.54 in a Single Sub" (team 15th, 38.98) | D' slot priority: replaces `priority_value`, pace tracker, first-come admission (Apache-2.0) | author's simulation +1.5; one LB draw 31.54 |
+| habanwer "arcaid3 lexicon" | sprite/object "lexicon" view of the board in the sandbox | v1 used in 0 of 1,130 tool calls; v2 unmeasured |
+| yukailiu "champion solution" | Franzen + the two above + path resolution | not the champion; no reported score |
+| jingshuifu v3 | `ARC3_PRIORITY_PACE=1` only | none |
+| heliosli, zhangyues0000 | packaging, path resolution | none |
+
+None shows a gain beyond copy variance (mean 25.77, SD 3.93). D' is the only one with a stated
+mechanism and a licence that allows reuse, so it is our v8 (v6 + D'), queued after the memory pairs.
 
 ## Forum threads read (ids on the competition discussion board)
 

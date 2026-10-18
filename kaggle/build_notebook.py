@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -139,9 +140,19 @@ def model_sources(inputs: dict) -> list[str]:
     return out
 
 
+def kernel_slug_for(title: str) -> str:
+    """Kaggle derives a kernel's slug from its title on the first push (lowercase, runs of
+    non-alphanumerics -> '-'), whatever `id` says; a later push with a mismatching id gets
+    HTTP 409. So the declared slug must equal the slugified title (2026-10-18)."""
+    return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+
+
 def kernel_metadata(cfg: dict) -> dict:
     inputs = cfg["inputs"]
     _, shape = accelerator(cfg)
+    expected = kernel_slug_for(cfg["title"])
+    if cfg["kernel_slug"] != expected:
+        raise ValueError(f"{cfg['variant']}: kernel_slug {cfg['kernel_slug']!r} must equal the slugified title {expected!r}")
     meta = {
         "id": f"{OWNER}/{cfg['kernel_slug']}",
         "title": cfg["title"],

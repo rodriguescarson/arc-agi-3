@@ -1,6 +1,6 @@
 {
   "variant": "v2-level-memory",
-  "kernel_slug": "arc3-duck-v2",
+  "kernel_slug": "arc3-duck-v2-level-memory-budget-bar",
   "title": "arc3 duck v2 (level memory + budget bar)",
   "notes": "v1 plus two prompt-side mechanisms, both off in v1: ARC3_LEVEL_MEMORY=1 exposes solved_levels() in the REPL (winning sequence + attempts per completed level, computed from history, zero generation cost) and mentions it once at level-up; ARC3_BAR_GUIDANCE=budget rewrites the edge-bar bullet from 'ignore it' to 'it is your remaining-actions budget, plan inside it' (rellik13, Milestone 2). Serving, model and scheduler unchanged.",
   "inputs": {

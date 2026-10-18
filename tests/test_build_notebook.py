@@ -120,3 +120,14 @@ def test_smoke_scores_come_from_the_played_runs():
         {"game_id": "ls20-1", "score": 1.0, "state": "won", "levels": 7, "actions": 7},
         {"game_id": "vc33-2", "score": 0.25, "state": "playing", "levels": 1, "actions": 9},
     ]
+
+
+def test_every_variant_slug_is_its_slugified_title():
+    """Kaggle names the kernel after the title on the first push; a second push under a
+    different declared id is a 409 (it blocked the v6/v3 re-push on 2026-10-18)."""
+    import json
+    for path in sorted((ROOT / "kaggle" / "variants").glob("*.json")):
+        cfg = json.loads(path.read_text())
+        assert cfg["kernel_slug"] == build_notebook.kernel_slug_for(cfg["title"]), path.name
+    assert build_notebook.kernel_slug_for("arc3 duck v6 (Swift-1.5 + level memory)") == "arc3-duck-v6-swift-1-5-level-memory"
+

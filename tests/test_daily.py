@@ -94,10 +94,10 @@ def test_run_phase_pushes_two_then_submits_and_refills():
     assert fake.pushes == ["v1-franzen-faithful", "v3-swift"] and "submit" not in kinds(out)   # two in flight
     out = daily.tick(PLAN, state, fake, T("2026-10-17T02:20:00"))     # both queued: no third push
     assert fake.pushes == ["v1-franzen-faithful", "v3-swift"]
-    fake.status["me/arc3-duck-v1"] = "COMPLETE"
+    fake.status["me/arc3-duck-v1-franzen-faithful"] = "COMPLETE"
     fake.now = T("2026-10-17T04:20:00")
     out = daily.tick(PLAN, state, fake, fake.now)
-    assert fake.subs[-1].description.startswith("arc3-auto variant=v1-franzen-faithful kernel=me/arc3-duck-v1 version=1")
+    assert fake.subs[-1].description.startswith("arc3-auto variant=v1-franzen-faithful kernel=me/arc3-duck-v1-franzen-faithful version=1")
     assert fake.pushes == ["v1-franzen-faithful", "v3-swift", "v2-level-memory"]   # slot refilled to two in flight
     out = daily.tick(PLAN, state, fake, T("2026-10-17T06:20:00"))     # slot used; nothing more today
     assert "submit" not in kinds(out) and len(fake.subs) == 1 and len(fake.pushes) == 3
@@ -250,8 +250,8 @@ def test_zero_action_smoke_is_broken_not_submitted_and_repushed():
         kernel = daily.variant_kernel("me", variant)
         state.setdefault("pushes", []).append({"at": "2026-10-16T12:00:00+00:00", "variant": variant, "version": 1, "kernel": kernel})
         fake.status[kernel] = "COMPLETE"
-    fake.smoke["me/arc3-duck-v1"] = 1          # broken
-    fake.smoke["me/arc3-duck-v3-swift"] = 40   # healthy
+    fake.smoke["me/arc3-duck-v1-franzen-faithful"] = 1          # broken
+    fake.smoke["me/arc3-duck-v3-swift-1-5-flash-next"] = 40   # healthy
     fake.now = T("2026-10-17T10:20:00")
     out = daily.tick(plan, state, fake, fake.now)
     assert fake.subs[-1].parsed["variant"] == "v3-swift"                      # the healthy one takes the slot
@@ -270,3 +270,17 @@ def test_unknown_smoke_telemetry_does_not_block_a_submission():
     fake.smoke[kernel] = None
     out = daily.tick(dict(PLAN, min_smoke_actions=5), state, fake, T("2026-10-17T10:20:00"))
     assert fake.subs[-1].parsed["variant"] == "v1-franzen-faithful" and not out.failed
+
+
+def test_gpu_session_count_refusal_is_transient_and_retried_next_tick():
+    """2026-10-18: 'Maximum batch GPU session count of 2 reached' (another project's kernel held a
+    slot). Not a quota failure: no 20 h pause, no job failure, retried on the next tick."""
+    fake, state = Fake(), {}
+    fake.push_error = "Kernel push error: Maximum batch GPU session count of 2 reached."
+    out = daily.tick(PLAN, state, fake, T("2026-10-17T00:20:00"))
+    assert not out.failed and any(a.text.startswith("push v1-franzen-faithful waits") for a in out.actions)
+    assert state["pushes"][-1]["transient"] is True
+    fake.push_error = None
+    out = daily.tick(PLAN, state, fake, T("2026-10-17T02:20:00"))      # two hours later, slot free: pushed
+    assert fake.pushes == ["v1-franzen-faithful", "v3-swift"] and "paused" not in " ".join(a.text for a in out.actions)
+

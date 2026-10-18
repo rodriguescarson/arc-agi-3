@@ -1,6 +1,6 @@
 {
   "variant": "v4-effort-medium",
-  "kernel_slug": "arc3-duck-v4-effort",
+  "kernel_slug": "arc3-duck-v4-reasoning-effort-medium",
   "title": "arc3 duck v4 (reasoning effort medium)",
   "notes": "v1 with ARC3_REASONING_EFFORT=medium: the Qwen3.8 chat template defaults to xhigh; medium drops the 'think carefully, validate, consider alternatives' instruction. UkisAI's table for the base model: GPQA 89.8 -> 86.4 with 76% fewer thinking tokens. Mechanism: more turns per game; one flag, harness otherwise identical to v1.",
   "inputs": {

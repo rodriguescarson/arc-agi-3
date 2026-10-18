@@ -307,15 +307,25 @@ def latest_push(state: dict, variant: str) -> dict | None:
     return max(pushes, key=lambda p: p["version"]) if pushes else None
 
 
+TRANSIENT_PUSH_ERRORS = ("Maximum batch GPU session count",)
+
+
+def is_transient_push_error(text: str) -> bool:
+    """Kaggle refuses a push while two GPU batch sessions are already running (any notebook on
+    the account). That is a wait for a slot, not a quota or config failure: retry next tick."""
+    return any(marker in (text or "") for marker in TRANSIENT_PUSH_ERRORS)
+
+
 def last_attempt(state: dict, variant: str) -> datetime | None:
-    stamps = [parse_time(p["at"]) for p in state.get("pushes", []) if p["variant"] == variant]
+    stamps = [parse_time(p["at"]) for p in state.get("pushes", []) if p["variant"] == variant and not p.get("transient")]
     return max(stamps) if stamps else None
 
 
 def last_failed_attempt(state: dict) -> datetime | None:
     """Most recent push that errored, any variant: quota errors are account-wide, so one failure
-    pauses every push for push_retry_hours instead of burning a tick on each variant."""
-    stamps = [parse_time(p["at"]) for p in state.get("pushes", []) if p.get("error")]
+    pauses every push for push_retry_hours instead of burning a tick on each variant.
+    Transient refusals (GPU session count) do not pause anything."""
+    stamps = [parse_time(p["at"]) for p in state.get("pushes", []) if p.get("error") and not p.get("transient")]
     return max(stamps) if stamps else None
 
 
@@ -361,8 +371,12 @@ def tick(plan: dict, state: dict, client, now: datetime, dry_run: bool = False) 
             out.actions.append(a)
         except Exception as exc:  # noqa: BLE001
             record["error"] = str(exc)[-300:]
-            out.actions.append(Action("failure", f"push {variant}: {record['error']}"))
-            out.failed = now >= start
+            if is_transient_push_error(record["error"]):
+                record["transient"] = True
+                out.note(f"push {variant} waits: {record['error'][-120:]}")
+            else:
+                out.actions.append(Action("failure", f"push {variant}: {record['error']}"))
+                out.failed = now >= start
         state["pushes"].append(record)
         return record["error"] is None
 

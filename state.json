@@ -126,6 +126,20 @@
       "error": "kernel push failed: 400 Client Error: Bad Request for url: https://api.kaggle.com/v1/kernels.KernelsApiService/SaveKernel",
       "variant": "v8-dprime-priority",
       "version": null
+    },
+    {
+      "at": "2026-10-18T17:16:35.983178+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v8-swift-level-memory-d-prime",
+      "variant": "v8-dprime-priority",
+      "version": 1
+    },
+    {
+      "at": "2026-10-18T17:16:35.983178+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v7-swift-level-memory-drain-memory",
+      "variant": "v7-drain-memory",
+      "version": 2
     }
   ],
   "submissions": [

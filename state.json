@@ -140,6 +140,13 @@
       "kernel": "carsonrodrigues/arc3-duck-v7-swift-level-memory-drain-memory",
       "variant": "v7-drain-memory",
       "version": 2
+    },
+    {
+      "at": "2026-10-18T19:28:03.496616+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v8i-intel-d-prime-priority",
+      "variant": "v8i-intel-dprime",
+      "version": 1
     }
   ],
   "submissions": [

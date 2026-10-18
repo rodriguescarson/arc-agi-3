@@ -15,6 +15,20 @@
    "note": "slug differs from the declared id carsonrodrigues/arc3-duck-v3-swift: Kaggle derived it from the title on first push",
    "variant": "v3-swift",
    "version": 1
+  },
+  {
+   "at": "2026-10-18T08:23:41.659484+00:00",
+   "error": null,
+   "kernel": "carsonrodrigues/arc3-duck-v6-swift-1-5-level-memory",
+   "variant": "v6-swift-level-memory",
+   "version": 2
+  },
+  {
+   "at": "2026-10-18T08:23:41.659484+00:00",
+   "error": "kernel push failed: Kernel push error: Maximum batch GPU session count of 2 reached.",
+   "transient": true,
+   "variant": "v3-swift",
+   "version": null
   }
  ],
  "submissions": [

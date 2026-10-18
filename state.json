@@ -106,6 +106,20 @@
       "kernel": "carsonrodrigues/arc3-duck-v7-swift-level-memory-drain-memory",
       "variant": "v7-drain-memory",
       "version": 1
+    },
+    {
+      "at": "2026-10-18T16:04:39.266540+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v2-level-memory-budget-bar",
+      "variant": "v2-level-memory",
+      "version": 2
+    },
+    {
+      "at": "2026-10-18T16:04:39.266540+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v1-franzen-faithful",
+      "variant": "v1-franzen-faithful",
+      "version": 2
     }
   ],
   "submissions": [

@@ -157,6 +157,26 @@ class KaggleClient:
                 return "unknown"
             return classify_served_model(path.read_text())
 
+    def smoke_actions(self, kernel: str, version: int) -> int | None:
+        """How many game actions the version's commit (smoke run) played, summed over its games,
+        from telemetry.json (written by cell 80). None when the file is missing or unreadable:
+        older versions and crashed commits. A commit whose model answered every request but
+        played nothing is broken (2026-10-17: a SyntaxError in the sandbox bootstrap did that)."""
+        import tempfile
+
+        import build_notebook
+
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = subprocess.run([build_notebook.kaggle_bin(), "kernels", "output", f"{kernel}/{version}", "-p", tmp,
+                                   "--file-pattern", "telemetry.json"], capture_output=True, text=True)
+            path = Path(tmp) / "telemetry.json"
+            if proc.returncode != 0 or not path.exists():
+                return None
+            try:
+                return smoke_actions_from_telemetry(json.loads(path.read_text()))
+            except (ValueError, TypeError):
+                return None
+
     def submit(self, competition: str, kernel: str, version: int, file_name: str, message: str) -> str:
         import build_notebook
 
@@ -181,6 +201,15 @@ def classify_served_model(text: str) -> str:
     if "intel" in low:
         return "intel"
     return "unknown"
+
+
+def smoke_actions_from_telemetry(telemetry: dict) -> int | None:
+    """Sum of `actions` over telemetry['smoke_scores'] (one entry per played game run);
+    None when the list is absent (CPU checks before PR #17 wrote {})."""
+    scores = telemetry.get("smoke_scores")
+    if not isinstance(scores, list):
+        return None
+    return sum(int(item.get("actions") or 0) for item in scores if isinstance(item, dict))
 
 
 def expects_swift(variant: str) -> bool:
@@ -278,15 +307,25 @@ def latest_push(state: dict, variant: str) -> dict | None:
     return max(pushes, key=lambda p: p["version"]) if pushes else None
 
 
+TRANSIENT_PUSH_ERRORS = ("Maximum batch GPU session count",)
+
+
+def is_transient_push_error(text: str) -> bool:
+    """Kaggle refuses a push while two GPU batch sessions are already running (any notebook on
+    the account). That is a wait for a slot, not a quota or config failure: retry next tick."""
+    return any(marker in (text or "") for marker in TRANSIENT_PUSH_ERRORS)
+
+
 def last_attempt(state: dict, variant: str) -> datetime | None:
-    stamps = [parse_time(p["at"]) for p in state.get("pushes", []) if p["variant"] == variant]
+    stamps = [parse_time(p["at"]) for p in state.get("pushes", []) if p["variant"] == variant and not p.get("transient")]
     return max(stamps) if stamps else None
 
 
 def last_failed_attempt(state: dict) -> datetime | None:
     """Most recent push that errored, any variant: quota errors are account-wide, so one failure
-    pauses every push for push_retry_hours instead of burning a tick on each variant."""
-    stamps = [parse_time(p["at"]) for p in state.get("pushes", []) if p.get("error")]
+    pauses every push for push_retry_hours instead of burning a tick on each variant.
+    Transient refusals (GPU session count) do not pause anything."""
+    stamps = [parse_time(p["at"]) for p in state.get("pushes", []) if p.get("error") and not p.get("transient")]
     return max(stamps) if stamps else None
 
 
@@ -332,8 +371,12 @@ def tick(plan: dict, state: dict, client, now: datetime, dry_run: bool = False) 
             out.actions.append(a)
         except Exception as exc:  # noqa: BLE001
             record["error"] = str(exc)[-300:]
-            out.actions.append(Action("failure", f"push {variant}: {record['error']}"))
-            out.failed = now >= start
+            if is_transient_push_error(record["error"]):
+                record["transient"] = True
+                out.note(f"push {variant} waits: {record['error'][-120:]}")
+            else:
+                out.actions.append(Action("failure", f"push {variant}: {record['error']}"))
+                out.failed = now >= start
         state["pushes"].append(record)
         return record["error"] is None
 
@@ -363,14 +406,27 @@ def tick(plan: dict, state: dict, client, now: datetime, dry_run: bool = False) 
         return out
 
     # ---- submit the first candidate that has a COMPLETE version (never waste the day) ----
+    # A COMPLETE commit whose smoke run played fewer than min_smoke_actions actions is reported
+    # as BROKEN: never submitted (the scored rerun would play nothing either) and re-pushed like
+    # an errored version once the bundle is fixed. Kaggle calls such a commit COMPLETE.
     status_cache: dict[str, str] = {}
+    min_actions = int(plan.get("min_smoke_actions", 1))
 
     def version_status(variant: str) -> tuple[dict | None, str | None]:
         rec = latest_push(state, variant)
         if not rec:
             return None, None
         if rec["kernel"] not in status_cache:
-            status_cache[rec["kernel"]] = client.kernel_status(rec["kernel"])
+            status = client.kernel_status(rec["kernel"])
+            if status == "COMPLETE":
+                played = client.smoke_actions(rec["kernel"], rec["version"])
+                if played is not None and played < min_actions:
+                    status = "BROKEN"
+                    out.actions.append(Action("failure", f"{variant}: {rec['kernel']} v{rec['version']} is COMPLETE but its "
+                                              f"smoke run played {played} action(s) (< min_smoke_actions={min_actions}); "
+                                              "not submittable, see its telemetry.json and log"))
+                    out.failed = True
+            status_cache[rec["kernel"]] = status
         return rec, status_cache[rec["kernel"]]
 
     ranked = candidates(plan, subs, now)

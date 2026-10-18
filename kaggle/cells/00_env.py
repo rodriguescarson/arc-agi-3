@@ -61,6 +61,18 @@ def _resolve_input(ref: str, *, model: bool = False, required: bool = True) -> s
     return ""
 
 
+def _competition_dir(slug: str = "arc-prize-2026-arc-agi-3", root: Path = Path("/kaggle/input")) -> Path:
+    """The competition's own input (arc_agi_3_wheels, environment_files) follows the same two
+    layouts: /kaggle/input/competitions/<slug> or /kaggle/input/<slug>. Kernels created on
+    2026-10-18 got the flat one while older kernels kept the nested one, and a hard-coded nested
+    path made pip find no arc-agi wheel (v1, v2, v7 died in 15 s)."""
+    candidates = [root / "competitions" / slug, root / slug]
+    for c in candidates:
+        if (c / "arc_agi_3_wheels").is_dir():
+            return c
+    raise FileNotFoundError(f"competition input not found; tried {[str(c) for c in candidates]}")
+
+
 def _merged_model_view(refs: list[str], view: Path) -> str:
     """A checkpoint uploaded as several Kaggle model instances (50-file limit per instance) is
     re-assembled as one directory of symlinks, so the loader sees a single HF-layout checkpoint."""
@@ -95,8 +107,9 @@ FALLBACK_MODEL_DIR = _resolve_input(INPUTS.get("fallback_model", ""), model=True
 DRAFT_MODEL_DIR = _resolve_input(INPUTS["draft"], model=True)
 BUNDLE_SOURCE_DIR = _resolve_input(INPUTS["bundle"])
 PY312_DATASET_DIR = _resolve_input(INPUTS["py312"], required=False)
+COMPETITION_DIR = _competition_dir()
 SERVED_MODEL_NAME = __SERVED_MODEL_NAME__
-print({"wheelhouse": WHEELHOUSE_DIR, "model": MODEL_DIR, "fallback_model": FALLBACK_MODEL_DIR, "draft": DRAFT_MODEL_DIR, "bundle": BUNDLE_SOURCE_DIR, "py312": PY312_DATASET_DIR})
+print({"wheelhouse": WHEELHOUSE_DIR, "model": MODEL_DIR, "fallback_model": FALLBACK_MODEL_DIR, "draft": DRAFT_MODEL_DIR, "bundle": BUNDLE_SOURCE_DIR, "py312": PY312_DATASET_DIR, "competition": str(COMPETITION_DIR)})
 
 # ---- the harness source bundle: copy to a writable location ----
 BUNDLE_DIR = Path("/kaggle/arc3-bundle")

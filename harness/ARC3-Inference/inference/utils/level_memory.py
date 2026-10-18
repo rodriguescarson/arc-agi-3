@@ -8,9 +8,10 @@ and ``entry.result`` so it works on both the host-side ``HistoryEntry`` dataclas
 sandbox's ``HistoryEntryView``.
 
 This file is injected verbatim into the sandbox bootstrap (see python_tool_sandbox.py), so
-it must not import anything outside the standard library.
+it must not import anything outside the standard library and must not carry a
+``from __future__`` import: spliced mid-file, that line is a SyntaxError that kills every
+sandbox call (it did, on 2026-10-17: two GPU commits played zero actions).
 """
-from __future__ import annotations
 
 RESET_NAMES = {"RESET"}
 

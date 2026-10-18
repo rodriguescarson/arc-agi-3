@@ -2,6 +2,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "kaggle"))
 
@@ -120,3 +122,40 @@ def test_smoke_scores_come_from_the_played_runs():
         {"game_id": "ls20-1", "score": 1.0, "state": "won", "levels": 7, "actions": 7},
         {"game_id": "vc33-2", "score": 0.25, "state": "playing", "levels": 1, "actions": 9},
     ]
+
+
+def test_every_variant_slug_is_its_slugified_title():
+    """Kaggle names the kernel after the title on the first push; a second push under a
+    different declared id is a 409 (it blocked the v6/v3 re-push on 2026-10-18)."""
+    import json
+    for path in sorted((ROOT / "kaggle" / "variants").glob("*.json")):
+        cfg = json.loads(path.read_text())
+        assert cfg["kernel_slug"] == build_notebook.kernel_slug_for(cfg["title"]), path.name
+    assert build_notebook.kernel_slug_for("arc3 duck v6 (Swift-1.5 + level memory)") == "arc3-duck-v6-swift-1-5-level-memory"
+
+
+def test_competition_input_resolves_in_both_mount_layouts(tmp_path):
+    """2026-10-18: kernels created that day got /kaggle/input/<slug> instead of
+    /kaggle/input/competitions/<slug>; the hard-coded nested wheel path killed v1, v2, v7."""
+    import ast
+
+    cfg = json.loads((ROOT / "kaggle" / "variants" / "v6-swift-level-memory.json").read_text())
+    source = dict(build_notebook.render_cells(cfg))["00_env.py"]
+    node = next(n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.FunctionDef) and n.name == "_competition_dir")
+    scope: dict = {"Path": Path}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "00_env", "exec"), scope)
+    resolve = scope["_competition_dir"]
+    slug = "arc-prize-2026-arc-agi-3"
+    for layout in (tmp_path / "nested" / "competitions" / slug, tmp_path / "flat" / slug):
+        (layout / "arc_agi_3_wheels").mkdir(parents=True)
+        assert resolve(slug, layout.parent.parent if layout.parent.name == "competitions" else layout.parent) == layout
+    with pytest.raises(FileNotFoundError):
+        resolve(slug, tmp_path / "empty")
+
+
+def test_no_cell_hard_codes_one_mount_layout():
+    for path in _variants():
+        cells = dict(build_notebook.render_cells(json.loads(path.read_text())))
+        for name, source in cells.items():
+            assert "/kaggle/input/competitions/arc-prize" not in source, (path.name, name)
+

@@ -1,4 +1,4 @@
-# Verbatim from Daniel Franzen's ARC-AGI-3 Milestone 2 notebook (Apache-2.0).
+# From Daniel Franzen's ARC-AGI-3 Milestone 2 notebook (Apache-2.0); wheel path resolved per mount layout.
 # Install the ARC runtime from the bundled competition wheels.
 # Quiet: stdout is discarded; stderr (and a non-zero exit) still surface real failures.
 subprocess.check_call(
@@ -12,7 +12,7 @@ subprocess.check_call(
         "--no-warn-conflicts",
         "--disable-pip-version-check",
         "--find-links",
-        "/kaggle/input/competitions/arc-prize-2026-arc-agi-3/arc_agi_3_wheels",
+        str(COMPETITION_DIR / "arc_agi_3_wheels"),   # either mount layout (00_env)
         "arc-agi",
     ],
     stdout=subprocess.DEVNULL,

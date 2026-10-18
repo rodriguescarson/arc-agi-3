@@ -1,6 +1,6 @@
 {
   "variant": "v1-franzen-faithful",
-  "kernel_slug": "arc3-duck-v1",
+  "kernel_slug": "arc3-duck-v1-franzen-faithful",
   "title": "arc3 duck v1 (Franzen-faithful)",
   "notes": "Daniel Franzen's Milestone-2 configuration (public LB 27.89; copies: mean 25.8, SD 3.9) run from our own source bundle. Establishes the pipeline and our own baseline draw. Only infrastructure differs: pre-patched bundle dataset, Python 3.12 selection for the cp312 wheelhouse, smoke-sized interactive commits.",
   "inputs": {

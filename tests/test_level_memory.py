@@ -66,3 +66,45 @@ def test_format_is_one_line_per_level():
 def test_empty_history():
     assert compute_solved_levels([]) == []
     assert compute_solved_levels([E("", F(1))]) == []
+
+
+# ---- the sandbox splice -------------------------------------------------------------------
+# python_tool_sandbox.py inlines this module's source into the child program it runs with
+# `python -I -S -c`. On 2026-10-17 a `from __future__` import at the top of this file landed
+# at line 893 of that program, every tool call died with a SyntaxError, and the first two GPU
+# commits played zero actions. These tests run the real child.
+
+def test_sandbox_bootstrap_compiles():
+    from inference.agent.python_tool_sandbox import _SANDBOX_BOOTSTRAP
+
+    compile(_SANDBOX_BOOTSTRAP, "<sandbox>", "exec")
+
+
+def test_sandbox_roundtrip_exposes_solved_levels():
+    from inference.agent.python_tool_sandbox import run_sandboxed_python
+
+    def frame(level, step):
+        return {"ascii": "BB\nBB", "step": step, "level": level, "shape": [2, 2], "grid": [[0, 0], [0, 0]]}
+
+    state = {
+        "current_frame": frame(2, 3),
+        "history": [
+            {"action": "", "frame": frame(1, 0)},
+            {"action": "UP", "frame": frame(1, 1)},
+            {"action": "RIGHT", "frame": frame(2, 2), "result": {"level_completed": True}},
+            {"action": "DOWN", "frame": frame(2, 3)},
+        ],
+        "valid_actions": ["UP", "DOWN", "LEFT", "RIGHT"],
+        "death_ledger": {"attempts": []},
+        "last_action_call_result": None,
+    }
+    result = run_sandboxed_python(
+        code="print(current_frame.level, valid_actions)\nprint(solved_levels())",
+        timeout_seconds=20,
+        initial_state=state,
+        action_handler=lambda *a, **k: {"ok": True},
+    )
+    assert not result.get("error"), result
+    out = result.get("stdout", "")
+    assert out.startswith("2 ['UP', 'DOWN', 'LEFT', 'RIGHT']"), out
+    assert "'level': 1" in out and "'winning_actions': ['UP', 'RIGHT']" in out, out

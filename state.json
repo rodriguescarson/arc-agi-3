@@ -99,6 +99,13 @@
       "transient": true,
       "variant": "v7-drain-memory",
       "version": null
+    },
+    {
+      "at": "2026-10-18T10:59:22.461784+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v7-swift-level-memory-drain-memory",
+      "variant": "v7-drain-memory",
+      "version": 1
     }
   ],
   "submissions": [

@@ -1,4 +1,4 @@
-# Status and handover (written 2026-10-13 01:30 IST; keep this file current)
+# Status and handover (written 2026-10-13 01:30 IST, updated 2026-10-18 14:30 IST; keep this file current)
 
 Everything a reader needs to run, check or stop this entry without the chat history.
 Times are IST unless marked UTC. Competition deadlines are UTC.
@@ -9,11 +9,13 @@ Times are IST unless marked UTC. Competition deadlines are UTC.
 |---|---|
 | Repo | `rodriguescarson/arc-agi-3` (private; make public before the deadline, prize rule). All changes via PR. GitHub refuses branch protection and rulesets on a private free-plan repo (HTTP 403 "Upgrade to GitHub Pro or make this repository public"), so the rule is procedural: merge only after the `test` check is green (PR #7 slipped through with a red check; fixed in #8). |
 | Kaggle account | `carsonrodrigues`. One submission per UTC day, shared by every session that uses the account. |
-| GPU quota | exhausted until **2026-10-17 00:00 UTC (05:30 IST)**; keep that week's 30 h for ARC. Each commit ≈ 35 min + an RTX queue of up to 8 h; scored reruns cost no quota. |
-| Submissions so far | 2026-10-12 04:25 UTC: "model-based explorer v7" from the paper-track workspace (`~/Projects/arc_prize_2026`), public 0.15. Nothing from this repo yet. |
+| GPU quota | week of Oct 17: four commits so far (v6 v1, v3 v1, both broken; v6 v2 queued 2026-10-18 08:23 UTC; v3 v2 waiting), ≈ 2.5 h of the 30 h. Each commit ≈ 35 min + an RTX queue of up to 8 h; scored reruns cost no quota. Kaggle allows **2 GPU batch sessions per account across all projects**: a queued `rsna-knee-reader-train-features` kernel held one on Oct 18. |
+| **GitHub Actions** | **Dead since 2026-10-16 17:35 UTC**: every `daily-submit` job (and the CI `test` check) fails in 3 s with "The job was not started because recent account payments have failed or your spending limit needs to be increased". Only Carson can fix it (Settings → Billing & plans). Until then the tick runs from this Mac: `kaggle/local_tick.sh` (loads/saves the `automation/state` branch like the workflow); on Oct 18 a shell loop ran it every 15 min, log `~/Library/Logs/arc3/local-tick.log`. The LaunchAgent and the routine keep dispatching a workflow that cannot start; harmless. |
+| Submissions so far | From this repo: 2026-10-14 pre-start CPU test 0.12. From the paper-track workspace (`~/Projects/arc_prize_2026`): Oct 12 0.15, Oct 13 0.08, Oct 15 0.08, Oct 16 0.01 (its last scheduled one). **Oct 17 slot lost**: the first two GPU commits (v6, v3) were COMPLETE but played 0 and 1 actions, a SyntaxError in the sandbox bootstrap (`from __future__` in the spliced `level_memory.py`); fixed 2026-10-18, details in `docs/SUBMISSIONS.md`. Oct 18: v6 v2 (fixed bundle 605bc36) queued, to be submitted by the local loop once COMPLETE and healthy. |
 | Public LB (Oct 11) | Yi-Chia Chen 62.96, Tufa 56.52, mtg 45.0; Franzen's open notebook 27.89; identical copies score mean 25.8, SD 3.9. |
 | Variants built | v1 Franzen-faithful, v3 Swift-1.5 target (+ Intel fallback + loader patch), v2 level memory, v4 reasoning effort medium. All render, 34 tests, CI green. CPU checks of v1 and v3 passed on Kaggle. |
-| Untested until the first GPU commit | the model server itself; for v3 the Swift load (patched loader, quantised gated `q_proj`). If Swift fails to boot, the notebook relaunches on the Intel checkpoint and records it in `served_model.txt`. |
+| GPU path | **Verified 2026-10-17**: Swift-1.5 loads with the Gated-DeltaNet loader patch (two-part model view, `served_model.txt` = ready), the Pennyroyal server boots in ~11 min and serves at 240-270 tok/s with MTP accept rate 0.82; the harness talks to it (1,974 requests). **Not yet verified**: a full smoke run with actions (v6 v2 pending) and the Intel fallback path. |
+| Guards added 2026-10-18 | `plan.json` `min_smoke_actions=5`: a COMPLETE commit whose smoke run played fewer actions is BROKEN (alert, never submitted, re-pushed). Kernel slugs must equal the slugified title (Kaggle names kernels after the title; a mismatched second push is HTTP 409). "Maximum batch GPU session count" refusals are transient retries, not a 20 h pause. |
 
 ## What runs automatically
 
@@ -38,7 +40,8 @@ State Kaggle cannot provide (kernel version ↔ variant, push attempts) lives in
 
 ## How to check
 
-- `gh run list --workflow daily-submit.yml --limit 5` and the job summary of a run (Actions → daily-submit).
+- `gh run list --workflow daily-submit.yml --limit 5` and the job summary of a run (Actions → daily-submit). While Actions is billing-blocked: `tail -40 ~/Library/Logs/arc3/local-tick.log`.
+- A GPU commit is healthy only if its `telemetry.json` `smoke_scores` show actions played (download with `kaggle kernels output <kernel>/<version> --file-pattern telemetry.json`); COMPLETE alone proved nothing on Oct 17.
 - `PYTHONPATH=. .venv/bin/python kaggle/daily.py report` (every submission with variant, kernel, version, status, public score).
 - `git show origin/automation/state:state.json` (what was pushed, when, and any push errors).
 - Kaggle: https://www.kaggle.com/competitions/arc-prize-2026-arc-agi-3/submissions
@@ -68,6 +71,8 @@ State Kaggle cannot provide (kernel version ↔ variant, push attempts) lives in
 - Swift's quantised gated attention may not load in Pennyroyal → automatic Intel fallback; the v3 draw is then a v1-equivalent run (check `served_model.txt`).
 - Franzen could remove his public model/wheelhouse datasets → mirror them (~90 GB) if that happens.
 - GitHub cron lag: mitigated by the LaunchAgent and the routine.
+- GitHub Actions billing (live since Oct 16): no automatic ticks and no CI until Carson restores billing; the local loop dies with the Mac's sleep or the session. Fix billing, or move the LaunchAgent to run `kaggle/local_tick.sh` directly.
+- Another project's GPU kernels (RSNA knee) share the account's two GPU batch sessions and can delay a push for hours.
 
 ## Next decisions (Carson)
 

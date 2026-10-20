@@ -1,7 +1,7 @@
 {
   "variant": "v8-dprime-priority",
-  "kernel_slug": "arc3-duck-v8-swift-level-memory-d-prime-priority",
-  "title": "arc3 duck v8 (Swift + level memory + D-prime priority)",
+  "kernel_slug": "arc3-duck-v8-swift-level-memory-d-prime",
+  "title": "arc3 duck v8 (Swift + level memory + D-prime)",
   "notes": "v6 (Swift-1.5 + level memory + budget bar) with shiiin9's D' slot priority (Apache-2.0, inference/agent/form_priority.py): priority = A*M*C + B*phi replaces Franzen's priority_value, pace = mean tokens per cleared level, unstarted games ranked by the same formula instead of first-come. Its installer also sets ARC3_PRIORITY_PACE=1 and tail fade 0.4; priority_env states the same values so the config matches what runs. Compared against v6 on the same hidden games.",
   "inputs": {
     "wheelhouse": "dfranzen/pennyroyal-v253",

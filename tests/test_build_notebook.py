@@ -159,3 +159,11 @@ def test_no_cell_hard_codes_one_mount_layout():
         for name, source in cells.items():
             assert "/kaggle/input/competitions/arc-prize" not in source, (path.name, name)
 
+
+def test_every_variant_title_fits_kaggles_limit():
+    """Kaggle rejects a kernel title over 50 characters with a bare HTTP 400 (v8's 54-character
+    title on 2026-10-18); its client applies the same 6-50 rule to dataset titles."""
+    for path in _variants():
+        title = json.loads(path.read_text())["title"]
+        assert 6 <= len(title) <= 50, (path.name, len(title))
+

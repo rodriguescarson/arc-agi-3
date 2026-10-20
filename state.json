@@ -147,6 +147,13 @@
       "kernel": "carsonrodrigues/arc3-duck-v8i-intel-d-prime-priority",
       "variant": "v8i-intel-dprime",
       "version": 1
+    },
+    {
+      "at": "2026-10-20T20:11:33.749932+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v7i-intel-level-mem-drain-memory",
+      "variant": "v7i-drain-memory",
+      "version": 1
     }
   ],
   "submissions": [

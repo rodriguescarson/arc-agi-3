@@ -6,13 +6,10 @@
   "freeze_utc": "2026-10-31T00:00:00Z",
   "end_utc": "2026-11-02T22:30:00Z",
   "order": [
-    "v6-swift-level-memory",
-    "v3-swift",
     "v2-level-memory",
     "v1-franzen-faithful",
     "v8i-intel-dprime",
-    "v8-dprime-priority",
-    "v7-drain-memory"
+    "v7i-drain-memory"
   ],
   "push_retry_hours": 20,
   "pre_start_tests": [
@@ -26,19 +23,8 @@
   ],
   "max_in_flight": 2,
   "draws_per_variant": 2,
-  "swaps": [
-    {
-      "better": "v2-level-memory",
-      "than": "v6-swift-level-memory",
-      "margin": 2.0,
-      "min_draws": 2,
-      "replace": {
-        "v7-drain-memory": "v7i-drain-memory"
-      },
-      "why": "if the Intel base beats Swift by more than 2 points over two draws each, build the next mechanism on Intel"
-    }
-  ],
-  "why_order": "Each level-memory variant is followed by its own no-memory twin on the same hidden games, so the memory effect is a measured difference rather than a single number: v6 (Swift + level memory) against v3 (Swift, no level memory), and v2 (Intel + level memory) against v1 (Intel, no level memory). Requested by Carson on 2026-10-15 for the ARC Prize paper, which reports cross-level memory in both the LLM harness and the symbolic explorer of ~/Projects/arc_prize_2026. With draws_per_variant=2 the scheduler takes two draws of each in turn, so the first complete pair exists after four submission days (Oct 17-20) and the second after eight. Identical copies of this notebook score mean 25.77 SD 3.93, so a single pair cannot settle a small effect; the paper pre-registered that it claims an effect only above 11 points. v8 (v6 + shiiin9's D' slot priority) is queued after both pairs, added 2026-10-18 on Carson's request, so the memory comparison is untouched; it pairs with v6 (same base, only the priority differs). v8i (v1 + D') follows v1, added 2026-10-18 after the Swift base scored 4.92; Carson now submits by hand, so this order drives pushes and the report, not the daily choice.",
+  "swaps": [],
+  "why_order": "Revised 2026-10-20 after the first two GPU draws: v6 (Swift-1.5 + level memory) scored 4.92 and v1 (Intel, Franzen-faithful) 29.93, and every Swift smoke run cleared 2-4 levels against 5-9 for Intel. The Swift variants (v3, v6, v7, v8) are dropped; their files stay for the record. On the Intel base: v2 (level memory) twice and v1 once more complete the paper's memory pair (v2 vs v1, two draws each; the paper pre-registered that it claims an effect only above 11 points, given copy SD 3.93); v8i (v1 + D' slot priority) gets its second draw (first submitted 2026-10-20); v7i (Intel + level memory + drain memory) twice. Then the best mean public score repeats until end_utc. The Swift pair (v6 vs v3) is abandoned after v6's 4.92, and the paper says so.",
   "min_smoke_actions": 5,
   "why_min_smoke_actions": "A commit is submittable only if its smoke run (two public games, 18 min each) played at least this many actions in total. The 2026-10-17 commits of v6 and v3 were COMPLETE with the model answering 1,974 requests and 0 and 1 actions played: a SyntaxError in the sandbox bootstrap killed every python tool call. The random CPU check plays 60 per game; a healthy LLM run plays dozens."
 }

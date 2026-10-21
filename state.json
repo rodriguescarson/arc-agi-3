@@ -170,6 +170,13 @@
       "message": "arc3-auto variant=v6-swift-level-memory kernel=carsonrodrigues/arc3-duck-v6-swift-1-5-level-memory version=2 rev=15dc497 model=swift",
       "variant": "v6-swift-level-memory",
       "version": 2
+    },
+    {
+      "at": "2026-10-21T10:15:11.048481+00:00",
+      "kernel": "carsonrodrigues/arc3-duck-v2-level-memory-budget-bar",
+      "message": "arc3-auto variant=v2-level-memory kernel=carsonrodrigues/arc3-duck-v2-level-memory-budget-bar version=2 rev=4033b27 model=intel",
+      "variant": "v2-level-memory",
+      "version": 2
     }
   ]
 }

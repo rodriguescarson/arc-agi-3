@@ -184,6 +184,13 @@
       "message": "arc3-auto variant=v2-level-memory kernel=carsonrodrigues/arc3-duck-v2-level-memory-budget-bar version=2 rev=4033b27 model=intel",
       "variant": "v2-level-memory",
       "version": 2
+    },
+    {
+      "at": "2026-10-23T00:01:10.326913+00:00",
+      "kernel": "carsonrodrigues/arc3-duck-v1-franzen-faithful",
+      "message": "arc3-auto variant=v1-franzen-faithful kernel=carsonrodrigues/arc3-duck-v1-franzen-faithful version=2 rev=4033b27 model=intel",
+      "variant": "v1-franzen-faithful",
+      "version": 2
     }
   ]
 }

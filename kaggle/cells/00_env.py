@@ -27,7 +27,11 @@ print(f"arc-agi-3 notebook variant {VARIANT!r}; python {sys.version.split()[0]} 
 # even if the backend is not ready yet, and the first started game performs a single RESET.
 SERVER_STARTUP_TIMEOUT = __SERVER_STARTUP_TIMEOUT__
 os.environ["ARC3_WARMUP_ACTION_GAMES"] = "1"
-os.environ["ARC3_HTTP_RETRY_INITIAL_SECONDS"] = "900"
+# Each game's first request waits this long for the server before failures start to count
+# (10 in a row abandon the game). 900 s was Franzen's; on 2026-10-23 weights took 24+ minutes
+# to load and the server was not up 40 minutes after start, so a game whose grace ran out
+# first would be abandoned. 90 minutes covers it; it only applies until the first request lands.
+os.environ["ARC3_HTTP_RETRY_INITIAL_SECONDS"] = "5400"
 # Keepalive (2026-10-23): the rerun ends after 15 minutes without a move, and slow mounts now
 # push server readiness past that. The warmup game RESETs every 5 minutes until /health is 200.
 os.environ["ARC3_WARMUP_KEEPALIVE_SECONDS"] = "300"

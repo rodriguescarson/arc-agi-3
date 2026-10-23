@@ -202,6 +202,22 @@
       "note": "forced re-push after the startup keepalive fix (PR #26)",
       "variant": "v1-franzen-faithful",
       "version": 4
+    },
+    {
+      "at": "2026-10-23T10:18:09.151702+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v2-level-memory-budget-bar",
+      "note": "forced re-push after the startup keepalive fix (PR #26)",
+      "variant": "v2-level-memory",
+      "version": 4
+    },
+    {
+      "at": "2026-10-23T10:18:11.968899+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v1-franzen-faithful",
+      "note": "forced re-push after the startup keepalive fix (PR #26)",
+      "variant": "v1-franzen-faithful",
+      "version": 5
     }
   ],
   "submissions": [

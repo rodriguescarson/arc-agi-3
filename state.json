@@ -170,6 +170,22 @@
       "transient": true,
       "variant": "v1-franzen-faithful",
       "version": null
+    },
+    {
+      "at": "2026-10-23T08:27:37.700353+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v1-franzen-faithful",
+      "note": "forced re-push after the startup keepalive fix (PR #26)",
+      "variant": "v1-franzen-faithful",
+      "version": 3
+    },
+    {
+      "at": "2026-10-23T08:27:42.153330+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v8i-intel-d-prime-priority",
+      "note": "forced re-push after the startup keepalive fix (PR #26)",
+      "variant": "v8i-intel-dprime",
+      "version": 2
     }
   ],
   "submissions": [

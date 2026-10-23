@@ -77,8 +77,8 @@
       "ls20",
       "vc33"
     ],
-    "minutes_per_game": 18,
-    "total_minutes": 65,
+    "minutes_per_game": 45,
+    "total_minutes": 80,
     "passes": 1,
     "save_request_logs": true
   }

@@ -73,3 +73,18 @@ def test_the_notebook_turns_it_on_for_every_variant():
         env = dict(build_notebook.render_cells(json.loads(path.read_text())))["00_env.py"]
         assert 'os.environ["ARC3_WARMUP_KEEPALIVE_SECONDS"] = "300"' in env, path.name
         assert 'os.environ["ARC3_WARMUP_HEALTH_URL"] = "http://127.0.0.1:8001/health"' in env, path.name
+
+
+def test_first_request_grace_outlasts_slow_loading():
+    """A game abandons itself after 10 failed requests once its first-request grace is spent; with
+    loads of 40+ minutes, 900 s would let the first games die before the server answers."""
+    import json
+    import sys
+
+    sys.path.insert(0, str(ROOT / "kaggle"))
+    import build_notebook
+
+    for path in sorted((ROOT / "kaggle" / "variants").glob("*.json")):
+        env = dict(build_notebook.render_cells(json.loads(path.read_text())))["00_env.py"]
+        assert 'os.environ["ARC3_HTTP_RETRY_INITIAL_SECONDS"] = "5400"' in env, path.name
+

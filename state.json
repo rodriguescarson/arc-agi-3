@@ -186,6 +186,14 @@
       "note": "forced re-push after the startup keepalive fix (PR #26)",
       "variant": "v8i-intel-dprime",
       "version": 2
+    },
+    {
+      "at": "2026-10-23T09:13:29.518705+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v7i-intel-level-mem-drain-memory",
+      "note": "forced re-push after the startup keepalive fix (PR #26)",
+      "variant": "v7i-drain-memory",
+      "version": 2
     }
   ],
   "submissions": [

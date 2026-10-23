@@ -225,11 +225,20 @@ def slot_free(subs: list[Submission], now: datetime) -> tuple[bool, list[Submiss
     return (not counted), todays
 
 
+def platform_killed(s: Submission) -> bool:
+    """A COMPLETE variant draw that scored exactly 0.00. For this harness that is not a result:
+    the rerun ends a submission when no game moves for 15 minutes, and slow model loading did
+    that on 2026-10-22/23 to versions that had scored 29.5 and 29.9. Such a draw does not count
+    toward draws_per_variant or the means, so the variant is drawn again."""
+    p = s.parsed
+    return bool(p and p["variant"]) and s.status == "COMPLETE" and s.public_score == 0.0
+
+
 def submitted_counts(subs: list[Submission]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for s in subs:
         p = s.parsed
-        if p and p["variant"] and s.status != "ERROR":
+        if p and p["variant"] and s.status != "ERROR" and not platform_killed(s):
             counts[p["variant"]] = counts.get(p["variant"], 0) + 1
     return counts
 
@@ -243,7 +252,7 @@ def mean_scores(subs: list[Submission]) -> dict[str, tuple[float, int]]:
     acc: dict[str, list[float]] = {}
     for s in subs:
         p = s.parsed
-        if p and p["variant"] and s.public_score is not None:
+        if p and p["variant"] and s.public_score is not None and not platform_killed(s):
             acc.setdefault(p["variant"], []).append(s.public_score)
     return {v: (sum(x) / len(x), len(x)) for v, x in acc.items()}
 
@@ -252,7 +261,7 @@ def best_scores(subs: list[Submission]) -> dict[str, float]:
     best: dict[str, float] = {}
     for s in subs:
         p = s.parsed
-        if p and p["variant"] and s.public_score is not None:
+        if p and p["variant"] and s.public_score is not None and not platform_killed(s):
             best[p["variant"]] = max(best.get(p["variant"], float("-inf")), s.public_score)
     return best
 

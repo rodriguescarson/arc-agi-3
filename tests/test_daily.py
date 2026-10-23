@@ -284,3 +284,15 @@ def test_gpu_session_count_refusal_is_transient_and_retried_next_tick():
     out = daily.tick(PLAN, state, fake, T("2026-10-17T02:20:00"))      # two hours later, slot free: pushed
     assert fake.pushes == ["v1-franzen-faithful", "v3-swift"] and "paused" not in " ".join(a.text for a in out.actions)
 
+
+def test_a_zero_draw_is_a_platform_kill_and_is_drawn_again():
+    """2026-10-22/23: v2 and v1 scored 0.00 with the versions that had scored 29.54 and 29.93
+    (the rerun ends after 15 minutes without a move). Such draws must not fill the quota."""
+    def sub(variant, score, status="COMPLETE"):
+        return daily.Submission(T("2026-10-21T00:01:00"), f"arc3-auto variant={variant} kernel=me/k version=2", status, score)
+    subs = [sub("v2-level-memory", 29.54), sub("v2-level-memory", 0.0), sub("v1-franzen-faithful", 0.0)]
+    assert daily.submitted_counts(subs) == {"v2-level-memory": 1}
+    assert daily.mean_scores(subs) == {"v2-level-memory": (29.54, 1)}
+    assert daily.best_scores(subs) == {"v2-level-memory": 29.54}
+    assert not daily.platform_killed(sub("v2-level-memory", None, "PENDING"))
+

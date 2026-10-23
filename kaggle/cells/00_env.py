@@ -28,6 +28,10 @@ print(f"arc-agi-3 notebook variant {VARIANT!r}; python {sys.version.split()[0]} 
 SERVER_STARTUP_TIMEOUT = __SERVER_STARTUP_TIMEOUT__
 os.environ["ARC3_WARMUP_ACTION_GAMES"] = "1"
 os.environ["ARC3_HTTP_RETRY_INITIAL_SECONDS"] = "900"
+# Keepalive (2026-10-23): the rerun ends after 15 minutes without a move, and slow mounts now
+# push server readiness past that. The warmup game RESETs every 5 minutes until /health is 200.
+os.environ["ARC3_WARMUP_KEEPALIVE_SECONDS"] = "300"
+os.environ["ARC3_WARMUP_HEALTH_URL"] = "http://127.0.0.1:8001/health"
 
 # ---- attached inputs (all public Kaggle datasets / models) ----
 INPUTS = __INPUTS__

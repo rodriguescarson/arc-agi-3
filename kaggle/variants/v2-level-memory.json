@@ -11,7 +11,7 @@
     "draft": "dfranzen/albucino-qwen3-8-flash-next-drafter/Transformers/default/1"
   },
   "served_model_name": "flashnext",
-  "server_startup_timeout_s": 720,
+  "server_startup_timeout_s": 480,
   "use_priority_scheduling": true,
   "setup_env": {
     "USE_TF": "0",

@@ -194,6 +194,14 @@
       "note": "forced re-push after the startup keepalive fix (PR #26)",
       "variant": "v7i-drain-memory",
       "version": 2
+    },
+    {
+      "at": "2026-10-23T09:15:18.237379+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v1-franzen-faithful",
+      "note": "forced re-push after the startup keepalive fix (PR #26)",
+      "variant": "v1-franzen-faithful",
+      "version": 4
     }
   ],
   "submissions": [

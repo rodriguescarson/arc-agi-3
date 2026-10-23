@@ -218,6 +218,22 @@
       "note": "forced re-push after the startup keepalive fix (PR #26)",
       "variant": "v1-franzen-faithful",
       "version": 5
+    },
+    {
+      "at": "2026-10-23T11:19:26.009360+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v8i-intel-d-prime-priority",
+      "note": "forced re-push after the startup keepalive fix (PR #26)",
+      "variant": "v8i-intel-dprime",
+      "version": 3
+    },
+    {
+      "at": "2026-10-23T11:19:28.417866+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v7i-intel-level-mem-drain-memory",
+      "note": "forced re-push after the startup keepalive fix (PR #26)",
+      "variant": "v7i-drain-memory",
+      "version": 3
     }
   ],
   "submissions": [

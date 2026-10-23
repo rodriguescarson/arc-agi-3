@@ -101,6 +101,53 @@ ANALYZER_RETRY_BACKOFF_SECONDS = max(
 # the wait. 0 disables.
 WARMUP_ACTION_GAMES = _env_number("ARC3_WARMUP_ACTION_GAMES", 0, int)
 
+# The competition rerun also ends a submission when no game has moved for 15 minutes
+# (Jeroen Cottaar, forum 750173; since mid-October dataset mounting and model loading take
+# 2-3x longer, so one warmup RESET is not enough: two arc-agi-3 draws that had scored 29.5 and
+# 29.9 scored 0.00 on 2026-10-22/23). With an interval set, the warmup game keeps issuing a
+# RESET every that many seconds until the analyzer's health URL answers 200, then plays as
+# usual. 0 disables (one RESET only, the upstream behaviour).
+WARMUP_KEEPALIVE_SECONDS = _env_number("ARC3_WARMUP_KEEPALIVE_SECONDS", 0.0, float)
+WARMUP_HEALTH_URL = os.environ.get("ARC3_WARMUP_HEALTH_URL", "").strip()
+WARMUP_KEEPALIVE_MAX_SECONDS = _env_number("ARC3_WARMUP_KEEPALIVE_MAX_SECONDS", 3 * 3600.0, float)
+
+
+def _health_ok(url: str, timeout: float = 5.0) -> bool:
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            return response.status == 200
+    except Exception:  # noqa: BLE001 - any failure means "not ready yet"
+        return False
+
+
+def _keepalive_until_healthy(
+    reset: Callable[[], None],
+    healthy: Callable[[], bool],
+    should_stop: Callable[[], bool],
+    *,
+    interval: float,
+    max_seconds: float,
+    poll: float = 5.0,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> int:
+    """Call `reset` every `interval` seconds until `healthy()` is true, the run is stopping, or
+    `max_seconds` have passed; returns how many keepalive RESETs were issued. The caller has
+    already issued the first RESET, so the first keepalive comes `interval` seconds later."""
+    start = last = clock()
+    issued = 0
+    while not should_stop() and clock() - start < max_seconds:
+        if healthy():
+            return issued
+        if clock() - last >= interval:
+            reset()
+            issued += 1
+            last = clock()
+        sleep(poll)
+    return issued
+
 
 MAX_CONSECUTIVE_ANALYZER_FAILURES = _env_number("ARC3_MAX_ANALYZER_FAILURES", 10, int)
 DEFAULT_CANCEL_DRAIN_TIMEOUT_SECONDS = 120.0
@@ -649,6 +696,16 @@ class _HarnessGameSession:
                 run.game_id,
             )
             self._execute_auto_reset()
+            if WARMUP_KEEPALIVE_SECONDS > 0 and WARMUP_HEALTH_URL:
+                def _reset() -> None:
+                    log.warning("%s: keepalive RESET; the analyzer is still loading", run.game_id)
+                    self._execute_auto_reset()
+
+                issued = _keepalive_until_healthy(
+                    _reset, lambda: _health_ok(WARMUP_HEALTH_URL), self.should_stop,
+                    interval=WARMUP_KEEPALIVE_SECONDS, max_seconds=WARMUP_KEEPALIVE_MAX_SECONDS,
+                )
+                log.warning("%s: analyzer reachable after %d keepalive RESET(s)", run.game_id, issued)
         try:
             retry_analysis_step: int | None = None
             consecutive_failures = 0

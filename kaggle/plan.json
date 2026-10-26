@@ -6,7 +6,7 @@
   "freeze_utc": "2026-10-31T00:00:00Z",
   "end_utc": "2026-11-02T22:30:00Z",
   "order": [
-    "v1-franzen-faithful"
+    "v1f-multithread-load"
   ],
   "push_retry_hours": 20,
   "pre_start_tests": [
@@ -21,7 +21,7 @@
   "max_in_flight": 2,
   "draws_per_variant": 2,
   "swaps": [],
-  "why_order": "Revised 2026-10-26 after the RCA (docs/RCA-2026-10-26.md): every Intel variant scores like a Franzen copy, and nothing left can be measured in the remaining six draws, so the remaining days all go to v1 (best mean, 27.89 over two draws). v7i is dropped. v1f (multithreaded weight loading) replaces v1 here if its commit verifies a faster load. Earlier orders and their reasons are in git history.",
+  "why_order": "2026-10-26: the remaining daily draws go to v1f = v1 + SGLang multithreaded weight loading. Its commit loaded the main weights in 737 s against 959-1,427 s for every Intel load since 10-23 (v1 v5: 959 s), with no memory errors, and its smoke run matched v1 (620 actions, mean 67.86, vc33 7/7, vs v1 v5 712 actions, 66.24). One measurement, so the gain is 4-11 minutes of extra play per run, not more. Before that: v1 only (RCA, docs/RCA-2026-10-26.md); earlier orders are in git history.",
   "min_smoke_actions": 5,
   "why_min_smoke_actions": "A commit is submittable only if its smoke run (two public games, 18 min each) played at least this many actions in total. The 2026-10-17 commits of v6 and v3 were COMPLETE with the model answering 1,974 requests and 0 and 1 actions played: a SyntaxError in the sandbox bootstrap killed every python tool call. The random CPU check plays 60 per game; a healthy LLM run plays dozens."
 }

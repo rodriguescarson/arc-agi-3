@@ -167,3 +167,11 @@ def test_every_variant_title_fits_kaggles_limit():
         title = json.loads(path.read_text())["title"]
         assert 6 <= len(title) <= 50, (path.name, len(title))
 
+
+def test_multithread_load_is_a_serve_cfg_switch_off_by_default():
+    v1 = dict(build_notebook.render_cells(json.loads((ROOT / "kaggle/variants/v1-franzen-faithful.json").read_text())))
+    v1f = dict(build_notebook.render_cells(json.loads((ROOT / "kaggle/variants/v1f-multithread-load.json").read_text())))
+    assert '"MULTITHREAD_LOAD"' not in v1["40_serve.py"] or "'MULTITHREAD_LOAD': True" not in v1["40_serve.py"]
+    assert "'MULTITHREAD_LOAD': True" in v1f["40_serve.py"]
+    assert '{"enable_multithread_load":%s}' in v1f["40_serve.py"]
+

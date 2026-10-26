@@ -278,6 +278,13 @@
       "message": "arc3-auto variant=v1-franzen-faithful kernel=carsonrodrigues/arc3-duck-v1-franzen-faithful version=5 rev=9474cdd model=unknown",
       "variant": "v1-franzen-faithful",
       "version": 5
+    },
+    {
+      "at": "2026-10-26T00:01:10.421039+00:00",
+      "kernel": "carsonrodrigues/arc3-duck-v8i-intel-d-prime-priority",
+      "message": "arc3-auto variant=v8i-intel-dprime kernel=carsonrodrigues/arc3-duck-v8i-intel-d-prime-priority version=3 rev=9474cdd model=unknown",
+      "variant": "v8i-intel-dprime",
+      "version": 3
     }
   ]
 }

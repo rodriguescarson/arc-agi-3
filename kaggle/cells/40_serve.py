@@ -335,7 +335,10 @@ def _launch_server(model_dir):
     graph_bs = sorted({1, 2, 4, 7, 8, 9, 10, CFG["MAXREQ"], CFG["CUDAGRAPH_MAXBS"]})
     graph_bs = [n for n in graph_bs if n <= CFG["CUDAGRAPH_MAXBS"]]
     args = [SGLANG, "serve", "--model-path", model_dir, "--load-format", "safetensors",
-        "--model-loader-extra-config", '{"enable_multithread_load":false}',
+        # MULTITHREAD_LOAD (serve_cfg): Franzen's default is off. Weight loading slowed from ~6 to
+        # ~16-24 minutes on Kaggle between 10-17 and 10-23, so v1f tests it on (RCA 2026-10-26).
+        "--model-loader-extra-config",
+        '{"enable_multithread_load":%s}' % ("true" if CFG.get("MULTITHREAD_LOAD") else "false"),
         "--served-model-name", str(CFG["SERVED_NAME"]), "--host", "127.0.0.1",
         "--port", str(SERVED_MODEL_PORT), "--tensor-parallel-size", "1",
         "--dtype", "bfloat16", "--quantization", "auto-round",

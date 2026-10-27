@@ -293,6 +293,13 @@
       "message": "arc3-auto variant=v8i-intel-dprime kernel=carsonrodrigues/arc3-duck-v8i-intel-d-prime-priority version=3 rev=9474cdd model=unknown",
       "variant": "v8i-intel-dprime",
       "version": 3
+    },
+    {
+      "at": "2026-10-27T00:01:10.060575+00:00",
+      "kernel": "carsonrodrigues/arc3-duck-v1f-franzen-multithread-load",
+      "message": "arc3-auto variant=v1f-multithread-load kernel=carsonrodrigues/arc3-duck-v1f-franzen-multithread-load version=1 rev=95b4b7e model=unknown",
+      "variant": "v1f-multithread-load",
+      "version": 1
     }
   ]
 }

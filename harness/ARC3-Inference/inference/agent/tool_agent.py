@@ -44,6 +44,7 @@ from inference.agent.prompts import (
     WORLD_MODEL_FREE_ADDENDUM,
     FRAME_DIFF_HINT_ADDENDUM,
     LEVEL_MEMORY_ADDENDUM,
+    NAVIGATE_SKILL_ADDENDUM,
     LEVEL_MEMORY_START_LINE,
     apply_bar_budget_guidance,
     STEP_VERIFICATION_ADDENDUM,
@@ -122,6 +123,12 @@ def _level_memory_enabled() -> bool:
     """ARC3_LEVEL_MEMORY=1 exposes `solved_levels()` in the REPL and mentions it in the
     system prompt and the level-up prompt. Off preserves the Milestone-2 prompts."""
     return _get_env_bool("ARC3_LEVEL_MEMORY", False)
+
+
+def _navigate_skill_enabled() -> bool:
+    """ARC3_NAVIGATE_SKILL=1 tells the model about `navigate_to()` and `movement_model()`.
+    Both are always callable in the REPL; off preserves the Milestone-2 prompt."""
+    return _get_env_bool("ARC3_NAVIGATE_SKILL", False)
 
 
 def _bar_budget_guidance_enabled() -> bool:
@@ -2830,6 +2837,8 @@ def _build_system_prompt(*, tool_output_tokens: int) -> str:
         prompt += FRAME_DIFF_HINT_ADDENDUM
     if _level_memory_enabled():
         prompt += LEVEL_MEMORY_ADDENDUM
+    if _navigate_skill_enabled():
+        prompt += NAVIGATE_SKILL_ADDENDUM
     if _bar_budget_guidance_enabled():
         prompt = apply_bar_budget_guidance(prompt)
     if _get_env_bool("ARC3_STEP_VERIFICATION_HINT", False):

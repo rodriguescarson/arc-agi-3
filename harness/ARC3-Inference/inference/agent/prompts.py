@@ -362,11 +362,13 @@ NAVIGATE_SKILL_ADDENDUM = (
     "and returns a dict with `status`, `steps` and `at`. `target` is a `(row, col)` cell, a list "
     "of cells, or a colour number (reach any cell of that colour). It learns the controls only "
     "from UP/DOWN/LEFT/RIGHT moves already played on this level, so press each direction once "
-    "first; it treats a cell as open only if the piece has already moved onto that colour, and it "
-    "stops at the target, at the first step that does not land where predicted (`diverged`: "
-    "replan from there), at a guard refusal, or when the attempt or level ends. Every step is a "
-    "real action. `navigate_to(target, execute=False)` only plans, and `movement_model()` shows "
-    "the learned controls; neither spends an action.\n"
+    "first. It treats a cell as open only if the piece has already moved onto that colour; "
+    "`explore=True` also routes through colours it has not entered, but each wrong guess is a "
+    "wasted action, so use it only when the plain call returns `no_path`. It replans by itself "
+    "when a step lands somewhere unexpected, and stops at the target, at a step that changed "
+    "nothing (`diverged`: call it again to plan around it), at a guard refusal, or when the "
+    "attempt or level ends. Every step is a real action. `navigate_to(target, execute=False)` "
+    "only plans, and `movement_model()` shows the learned controls; neither spends an action.\n"
 )
 
 LEVEL_MEMORY_START_LINE = (

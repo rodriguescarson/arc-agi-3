@@ -602,9 +602,9 @@ _SANDBOX_BOOTSTRAP = textwrap.dedent(
 
         # Always callable, like solved_levels(); ARC3_NAVIGATE_SKILL only controls whether the
         # prompt mentions it. Each step goes through action(), so every guard still applies.
-        def navigate_to(target, execute=True, max_steps=40, adjacent=None):
+        def navigate_to(target, execute=True, max_steps=40, adjacent=None, explore=False):
             return run_navigation(target, _nav_state, action, execute=execute,
-                                  max_steps=max_steps, adjacent=adjacent)
+                                  max_steps=max_steps, adjacent=adjacent, explore=explore)
 
         runtime_globals["navigate_to"] = navigate_to
         runtime_globals["movement_model"] = lambda: describe_movement(*_nav_state())

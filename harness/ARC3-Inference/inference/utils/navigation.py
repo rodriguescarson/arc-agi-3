@@ -24,6 +24,7 @@ sandbox call (it did, on 2026-10-17).
 """
 
 import collections
+import heapq
 
 NAV_KEYS = ("UP", "DOWN", "LEFT", "RIGHT")
 _NAV_ALIASES = {"ACTION1": "UP", "ACTION2": "DOWN", "ACTION3": "LEFT", "ACTION4": "RIGHT"}
@@ -203,15 +204,27 @@ def learn_controls(transitions, level=None, max_size=400):
 
 
 def locate_piece(grid, model, max_size=400):
-    """Origin (row, col) of the controlled piece in ``grid``, or None."""
-    origins = [_nav_shape(cells)[1] for col, cells in nav_components(grid, None, max_size)
-               if col == model["colour"] and _nav_shape(cells)[0] == model["shape"]]
-    if not origins:
-        return None
+    """Origin (row, col) of the controlled piece in ``grid``, or None.
+
+    Prefers an exact colour-and-shape match nearest the last known origin; if the piece has
+    changed shape (rotated, animated), falls back to the nearest same-colour component of a
+    similar size.
+    """
+    comps = [(cells, _nav_shape(cells)) for col, cells in nav_components(grid, None, max_size)
+             if col == model["colour"]]
     anchor = model.get("last_origin")
-    if anchor is None or len(origins) == 1:
-        return origins[0]
-    return min(origins, key=lambda o: abs(o[0] - anchor[0]) + abs(o[1] - anchor[1]))
+
+    def nearest(origins):
+        if anchor is None or len(origins) == 1:
+            return origins[0]
+        return min(origins, key=lambda o: abs(o[0] - anchor[0]) + abs(o[1] - anchor[1]))
+
+    exact = [origin for cells, (shape, origin) in comps if shape == model["shape"]]
+    if exact:
+        return nearest(exact)
+    size = len(model["shape"])
+    similar = [origin for cells, (shape, origin) in comps if size / 2 <= len(cells) <= size * 2]
+    return nearest(similar) if similar else None
 
 
 def _nav_target_cells(grid, target, own):
@@ -225,8 +238,13 @@ def _nav_target_cells(grid, target, own):
     raise ValueError("target must be a (row, col) cell, a list of cells, or a colour number")
 
 
-def plan_path(grid, model, start, target, adjacent=False, max_nodes=20000):
-    """BFS over piece origins. Returns the key list (possibly empty), or None if unreachable."""
+def plan_path(grid, model, start, target, adjacent=False, explore=False, max_nodes=20000):
+    """Cheapest key sequence from ``start`` to ``target``, or None if unreachable.
+
+    Every move costs 1.  Without ``explore`` a destination must be open (own pixels, the
+    target, or a colour the piece has already entered); with ``explore`` other colours are
+    allowed at an extra cost of 4 per move, so known routes win whenever they exist.
+    """
     rows = len(grid)
     cols = len(grid[0]) if rows else 0
     shape = model["shape"]
@@ -242,38 +260,52 @@ def plan_path(grid, model, start, target, adjacent=False, max_nodes=20000):
     def reached(origin):
         return any((origin[0] + r, origin[1] + c) in goal_cells for r, c in shape)
 
-    def open_at(origin):
+    def move_cost(origin):
+        unknown = False
         for r, c in shape:
             rr, cc = origin[0] + r, origin[1] + c
             if not (0 <= rr < rows and 0 <= cc < cols):
-                return False
+                return None
             if (rr, cc) in own or (rr, cc) in goal_cells or grid[rr][cc] in passable:
                 continue
-            return False
-        return True
+            if not explore:
+                return None
+            unknown = True
+        return 5 if unknown else 1
 
     if reached(start):
         return []
+    best = {start: 0}
     parent = {start: None}
-    queue = collections.deque([start])
-    while queue and len(parent) < max_nodes:
-        here = queue.popleft()
+    heap = [(0, 0, start)]
+    tie = 0
+    while heap and len(parent) < max_nodes:
+        cost, _, here = heapq.heappop(heap)
+        if cost > best.get(here, cost):
+            continue
+        if here != start and reached(here):
+            path = []
+            node = here
+            while parent[node] is not None:
+                node, key_taken = parent[node]
+                path.append(key_taken)
+            return path[::-1]
         for key in NAV_KEYS:
             d = model["controls"].get(key)
             if d is None or d == (0, 0) or (here, key) in model["blocked"]:
                 continue
             nxt = (here[0] + d[0], here[1] + d[1])
-            if nxt in parent or nxt in model["deadly"] or not open_at(nxt):
+            if nxt in model["deadly"]:
                 continue
-            parent[nxt] = (here, key)
-            if reached(nxt):
-                path = []
-                node = nxt
-                while parent[node] is not None:
-                    node, key_taken = parent[node]
-                    path.append(key_taken)
-                return path[::-1]
-            queue.append(nxt)
+            step = move_cost(nxt)
+            if step is None:
+                continue
+            new_cost = cost + step
+            if new_cost < best.get(nxt, new_cost + 1):
+                best[nxt] = new_cost
+                parent[nxt] = (here, key)
+                tie += 1
+                heapq.heappush(heap, (new_cost, tie, nxt))
     return None
 
 
@@ -295,67 +327,97 @@ _NAV_REFUSALS = ("KnownNoOpActionError", "KnownDeathActionError", "RepeatedActio
                  "StaleStateActionError", "TerminalStateActionError")
 
 
-def run_navigation(target, get_state, act, execute=True, max_steps=40, adjacent=None):
+def run_navigation(target, get_state, act, execute=True, max_steps=40, adjacent=None,
+                   explore=False, replans=2):
     """Plan to ``target`` and, with ``execute``, walk there one verified step at a time.
 
     ``get_state()`` returns (current_frame, transitions); ``act(key)`` performs one action and
-    returns its result dict.  Returns a dict with ``status`` (reached, planned, no_path,
-    no_moves_observed, piece_not_found, diverged, refused, level_completed, game_over,
-    max_steps), ``steps`` (keys executed), ``planned`` (keys in the plan) and ``at``.
+    returns its result dict.  When a step lands somewhere other than predicted but the board
+    did change, the controls are relearned from the new evidence and the walk is replanned
+    from where the piece is, up to ``replans`` times.  A step that changed nothing ends the
+    call (the harness refuses the next action in the same snippet), and the next call plans
+    around it.  Returns a dict with ``status`` (reached, planned, no_path, no_moves_observed,
+    piece_not_found, diverged, refused, level_completed, game_over, max_steps), ``steps``
+    (keys executed), ``planned`` (keys in the first plan), ``replanned`` and ``at``.
     """
-    frame, transitions = get_state()
-    grid = _nav_grid(frame)
-    level = _nav_level(frame)
-    model = learn_controls(transitions, level)
-    if model is None or grid is None:
-        return {"status": "no_moves_observed", "steps": [], "planned": 0, "at": None,
-                "note": "press UP/DOWN/LEFT/RIGHT at least once on this level first"}
-    start = locate_piece(grid, model)
-    if start is None:
-        return {"status": "piece_not_found", "steps": [], "planned": 0, "at": None}
-    modes = [adjacent] if adjacent is not None else [False, True]
-    path = None
-    used_adjacent = False
-    for mode in modes:
-        path = plan_path(grid, model, start, target, adjacent=mode)
-        if path is not None:
-            used_adjacent = mode
-            break
-    controls = {k: list(v) for k, v in sorted(model["controls"].items())}
-    if path is None:
-        return {"status": "no_path", "steps": [], "planned": 0, "at": list(start),
-                "controls": controls, "inferred": model["inferred"]}
-    report = {"status": "planned", "steps": [], "planned": len(path), "path": path,
-              "at": list(start), "controls": controls, "inferred": model["inferred"],
-              "adjacent": used_adjacent}
-    if not execute:
-        return report
-    if not path:
-        report["status"] = "reached"
-        return report
-    here = start
-    for key in path[:max_steps]:
-        expected = (here[0] + model["controls"][key][0], here[1] + model["controls"][key][1])
-        try:
-            result = act(key) or {}
-        except BaseException as exc:  # the harness refusals derive from BaseException
-            if type(exc).__name__ not in _NAV_REFUSALS:
-                raise
-            report.update(status="refused", note=f"{type(exc).__name__}: {exc}")
+    report = {"status": "planned", "steps": [], "planned": 0, "replanned": 0, "at": None}
+    first = True
+    while True:
+        frame, transitions = get_state()
+        grid = _nav_grid(frame)
+        model = learn_controls(transitions, _nav_level(frame))
+        if model is None or grid is None:
+            report.update(status="no_moves_observed",
+                          note="press UP/DOWN/LEFT/RIGHT at least once on this level first")
             return report
-        report["steps"].append(key)
-        for flag in _NAV_STOP_FLAGS:
-            if result.get(flag):
-                report["status"] = "level_completed" if flag in ("level_completed", "run_complete", "done") \
-                    else "game_over"
+        start = locate_piece(grid, model)
+        if start is None:
+            report["status"] = "piece_not_found"
+            return report
+        report["at"] = list(start)
+        report["controls"] = {k: list(v) for k, v in sorted(model["controls"].items())}
+        report["inferred"] = model["inferred"]
+        path = None
+        modes = [adjacent] if adjacent is not None else [False, True]
+        explores = [False, True] if explore else [False]
+        for use_explore in explores:
+            for mode in modes:
+                path = plan_path(grid, model, start, target, adjacent=mode, explore=use_explore)
+                if path is not None:
+                    report["adjacent"], report["explore"] = mode, use_explore
+                    break
+            if path is not None:
+                break
+        if path is None:
+            report["status"] = "no_path"
+            if not explore:
+                report["note"] = ("no route through colours the piece has entered; "
+                                  "explore=True also tries unknown colours")
+            return report
+        if first:
+            report["planned"], report["path"] = len(path), path
+            first = False
+        if not execute:
+            return report
+        if not path:
+            report["status"] = "reached"
+            return report
+        here = start
+        replan = False
+        for key in path:
+            if len(report["steps"]) >= max_steps:
+                report["status"] = "max_steps"
                 return report
-        frame, _ = get_state()
-        now = locate_piece(_nav_grid(frame), dict(model, last_origin=expected))
-        report["at"] = list(now) if now else None
-        if now != expected:
-            report.update(status="diverged",
-                          note=f"{key} was predicted to reach {list(expected)}; replan from here")
+            expected = (here[0] + model["controls"][key][0], here[1] + model["controls"][key][1])
+            try:
+                result = act(key) or {}
+            except BaseException as exc:  # the harness refusals derive from BaseException
+                if type(exc).__name__ not in _NAV_REFUSALS:
+                    raise
+                report.update(status="refused", note=f"{type(exc).__name__}: {exc}")
+                return report
+            report["steps"].append(key)
+            for flag in _NAV_STOP_FLAGS:
+                if result.get(flag):
+                    report["status"] = "level_completed" if flag != "game_over" else "game_over"
+                    return report
+            frame, _ = get_state()
+            now = locate_piece(_nav_grid(frame), dict(model, last_origin=expected))
+            report["at"] = list(now) if now else None
+            if now == expected:
+                here = now
+                continue
+            moved = result.get("gameplay_changed")
+            if moved is None:
+                moved = now != here
+            if not moved or report["replanned"] >= replans:
+                report.update(status="diverged",
+                              note=f"{key} was predicted to reach {list(expected)}; "
+                                   "call navigate_to again to replan from here")
+                return report
+            report["replanned"] += 1
+            replan = True
+            break
+        if not replan:
+            report["status"] = "reached"
             return report
-        here = now
-    report["status"] = "reached" if len(path) <= max_steps else "max_steps"
-    return report

@@ -359,7 +359,9 @@ LEVEL_MEMORY_ADDENDUM = (
 
 NAVIGATE_SKILL_ADDENDUM = (
     "- `navigate_to(target)` walks the piece you control along the shortest path it can find "
-    "and returns a dict with `status`, `steps` and `at`. `target` is a `(row, col)` cell, a list "
+    "and returns a dict with `status`, `steps` and `at`. When you need to move the piece "
+    "somewhere, call it instead of writing your own path search: it is already tested and costs "
+    "no extra turn. `target` is a `(row, col)` cell, a list "
     "of cells, or a colour number (reach any cell of that colour). It learns the controls only "
     "from UP/DOWN/LEFT/RIGHT moves already played on this level, so press each direction once "
     "first. It treats a cell as open only if the piece has already moved onto that colour; "

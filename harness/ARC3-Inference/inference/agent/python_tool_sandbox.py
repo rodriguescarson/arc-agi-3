@@ -19,6 +19,7 @@ from inference.utils import frame_diff as _frame_diff_module
 from inference.utils import segmentation as _segmentation
 from inference.utils import retained_functions as _retained_functions
 from inference.utils import level_memory as _level_memory_module
+from inference.utils import navigation as _navigation_module
 from inference.utils.grid_utils import ARC_COLOR_CHARS
 
 
@@ -47,6 +48,8 @@ _SANDBOX_BOOTSTRAP = textwrap.dedent(
     __RETAINED_FUNCTIONS_SOURCE__
 
     __LEVEL_MEMORY_SOURCE__
+
+    __NAVIGATION_SOURCE__
 
     HOST_STDOUT = sys.stdout
 
@@ -593,6 +596,18 @@ _SANDBOX_BOOTSTRAP = textwrap.dedent(
             ]
 
         runtime_globals["action"] = action
+
+        def _nav_state():
+            return runtime_globals.get("current_frame"), runtime_globals.get("transitions") or []
+
+        # Always callable, like solved_levels(); ARC3_NAVIGATE_SKILL only controls whether the
+        # prompt mentions it. Each step goes through action(), so every guard still applies.
+        def navigate_to(target, execute=True, max_steps=40, adjacent=None):
+            return run_navigation(target, _nav_state, action, execute=execute,
+                                  max_steps=max_steps, adjacent=adjacent)
+
+        runtime_globals["navigate_to"] = navigate_to
+        runtime_globals["movement_model"] = lambda: describe_movement(*_nav_state())
         if initial.get("animation_enabled"):
             # Globals rather than attributes on last_transition: after a death
             # the harness appends a RESET entry, so last_transition is the
@@ -744,6 +759,8 @@ _SANDBOX_BOOTSTRAP = textwrap.dedent(
     "__FRAME_DIFF_SOURCE__\n", inspect.getsource(_frame_diff_module)
 ).replace(
     "__LEVEL_MEMORY_SOURCE__\n", inspect.getsource(_level_memory_module)
+).replace(
+    "__NAVIGATION_SOURCE__\n", inspect.getsource(_navigation_module)
 )
 
 

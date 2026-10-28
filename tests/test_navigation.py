@@ -133,7 +133,33 @@ def test_divergence_stops_and_reports():
         return Frame(b.grid(), b.level), ts
 
     out = run_navigation((9, 9), get_state, lambda key: b.press(key))
-    assert out["status"] == "diverged" and len(out["steps"]) == 1, out
+    # the board changed each time, so it replans twice, then gives up and says so
+    assert out["status"] == "diverged" and out["replanned"] == 2 and len(out["steps"]) == 3, out
+
+
+def test_noop_divergence_stops_without_replanning():
+    b = Board()
+    ts = _play(b, ["DOWN", "RIGHT"])
+    frozen = b.grid()
+
+    def get_state():
+        return Frame(frozen), ts
+
+    out = run_navigation(GOAL, get_state, lambda key: {"gameplay_changed": False})
+    assert out["status"] == "diverged" and out["replanned"] == 0 and len(out["steps"]) == 1, out
+
+
+def test_explore_crosses_a_colour_never_entered():
+    b = Board()
+    for r in range(1, 11):
+        for c in range(7, 11):
+            if b.base[r][c] == FLOOR:
+                b.base[r][c] = 5  # the right room has a floor colour the piece has never touched
+
+    ts = _play(b, ["DOWN", "RIGHT"])
+    model = learn_controls(ts, level=1)
+    assert plan_path(b.grid(), model, (3, 3), GOAL) is None
+    assert plan_path(b.grid(), model, (3, 3), GOAL, explore=True)
 
 
 def test_blocked_move_is_learned_and_avoided():

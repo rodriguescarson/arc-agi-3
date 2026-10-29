@@ -346,6 +346,26 @@ def _format_valid_action_line(valid_actions: list[str] | None) -> str:
     return ", ".join(names)
 
 
+def _attempt_loss_notice_enabled() -> bool:
+    """Whether the opener says an attempt was lost without a GAME_OVER.
+
+    ARC3_ATTEMPT_LOSS_NOTICE, off by default. The solver detects the restart
+    (utils/attempt_loss.py) and records where in the sequence it happened."""
+    return _get_env_bool("ARC3_ATTEMPT_LOSS_NOTICE", False)
+
+
+def _attempt_loss_line(summary: dict[str, Any]) -> str | None:
+    """The one-line notice for a sequence that lost an attempt, or None."""
+    after = summary.get("attempt_lost_after")
+    if not after or not _attempt_loss_notice_enabled():
+        return None
+    skipped = int(summary.get("attempt_lost_skipped") or 0)
+    return (
+        f"Attempt lost after action {after}: the level restarted; plan from the new board."
+        + (f" The remaining {skipped} action(s) of that sequence were not executed." if skipped else "")
+    )
+
+
 def _terminal_action_reason(result: dict[str, Any]) -> str | None:
     if result.get("run_complete"):
         return "run_complete"
@@ -355,6 +375,8 @@ def _terminal_action_reason(result: dict[str, Any]) -> str | None:
         return "level_completed"
     if result.get("done"):
         return "done"
+    if result.get("stop_reason") == "attempt_lost":
+        return "attempt_lost"
     return None
 
 
@@ -375,6 +397,11 @@ def _terminal_action_stop_detail(reason: str | None) -> str:
         )
     if reason == "done":
         return "No further actions were executed because the environment reported done."
+    if reason == "attempt_lost":
+        return (
+            "No further actions were executed because the previous action lost the attempt: "
+            "the level restarted from its start board. Re-ground on the new board before acting again."
+        )
     return "No further actions were executed because the previous action reached a terminal state."
 
 
@@ -3822,6 +3849,8 @@ class ToolAgent:
                 verdict = "RUN COMPLETE"
             elif item.get("level_completed"):
                 verdict = "LEVEL COMPLETED"
+            elif item.get("attempt_lost"):
+                verdict = "ATTEMPT LOST (the level restarted after this action; the game is not over)"
             elif item.get("gameplay_changed") is False:
                 verdict = (
                     "NO-OP (executed, no change inside the board area)"
@@ -3844,12 +3873,24 @@ class ToolAgent:
 
         total_executed = 0
         executed_actions: list[str] = []
+        attempt_lost_after = None
+        attempt_lost_skipped = 0
         for item in executed_results:
             count = item.get("executed_count")
             try:
                 parsed = int(count) if count is not None else 1
             except (TypeError, ValueError):
                 parsed = 1
+            lost_at = item.get("attempt_lost_at")
+            if isinstance(lost_at, list) and lost_at:
+                # positions in this call's executed list, made turn-wide like the trace;
+                # the LAST loss is the one whose board the model is now looking at
+                attempt_lost_after = total_executed + int(lost_at[-1])
+                attempt_lost_skipped = (
+                    len(item.get("skipped_actions") or [])
+                    if item.get("stop_reason") == "attempt_lost"
+                    else 0
+                )
             total_executed += max(1, parsed)
             action_names = item.get("executed_actions")
             if isinstance(action_names, list):
@@ -3897,6 +3938,8 @@ class ToolAgent:
                 bool(item.get("gameplay_changed")) for item in executed_results
             ),
             "stop_reason": last.get("stop_reason"),
+            "attempt_lost_after": attempt_lost_after,
+            "attempt_lost_skipped": attempt_lost_skipped,
             "no_op_stops": [
                 {
                     "action": item.get("no_op_action"),
@@ -4924,6 +4967,9 @@ class ToolAgent:
             lines.append("The attempt ended and the level was reset.")
         else:
             lines.append(self._manual_reset_context_line(summary) or "You are still on the same level.")
+            attempt_loss_line = _attempt_loss_line(summary)
+            if attempt_loss_line:
+                lines.append(attempt_loss_line)
         step = summary.get("action_num")
         level = summary.get("level")
         if step is not None and level is not None:
@@ -5093,6 +5139,11 @@ class ToolAgent:
                     self._manual_reset_context_line(previous_step_summary)
                     or "You are still on the same level."
                 )
+                # right under the line that would otherwise leave the model believing
+                # nothing happened to its board
+                attempt_loss_line = _attempt_loss_line(previous_step_summary)
+                if attempt_loss_line:
+                    lines.append(attempt_loss_line)
             if previous_step_summary.get("game_over"):
                 lines.append(
                     "GAME OVER occurred during the previous sequence. This means the "
@@ -5823,7 +5874,7 @@ class ToolAgent:
             compact["stopped_early"] = bool(payload.get("stopped_early"))
         # blocked_action names the refused action for the next turn's opener;
         # without it the model was told "the sequence was stopped before None"
-        for passthrough_key in ("no_op_action_index", "no_op_action", "skipped_actions", "gameplay_changed_per_action", "action_trace", "no_op", "fatal_action", "blocked_action", "action_echo", "animation"):
+        for passthrough_key in ("no_op_action_index", "no_op_action", "skipped_actions", "gameplay_changed_per_action", "action_trace", "no_op", "fatal_action", "blocked_action", "action_echo", "animation", "attempt_lost", "attempt_lost_at"):
             if passthrough_key in payload:
                 compact[passthrough_key] = payload.get(passthrough_key)
         if payload.get("stop_reason"):

@@ -296,3 +296,57 @@ def test_a_zero_draw_is_a_platform_kill_and_is_drawn_again():
     assert daily.best_scores(subs) == {"v2-level-memory": 29.54}
     assert not daily.platform_killed(sub("v2-level-memory", None, "PENDING"))
 
+
+
+def test_with_retry_retries_rate_limits_then_succeeds():
+    calls, slept = [], []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise RuntimeError("429 Client Error: Too Many Requests for url: .../ListSubmissions")
+        return "ok"
+
+    assert daily.with_retry(flaky, sleep=slept.append) == "ok"
+    assert len(calls) == 3 and slept == [20.0, 40.0]
+
+
+def test_with_retry_raises_non_transient_at_once():
+    calls = []
+
+    def broken():
+        calls.append(1)
+        raise ValueError("Expecting value: line 1 column 1 (char 0)")
+
+    try:
+        daily.with_retry(broken, sleep=lambda s: None)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("should raise")
+    assert len(calls) == 1
+
+
+def test_with_retry_gives_up_after_tries():
+    calls = []
+
+    def always():
+        calls.append(1)
+        raise RuntimeError("503 Service Unavailable")
+
+    try:
+        daily.with_retry(always, tries=3, sleep=lambda s: None)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("should raise")
+    assert len(calls) == 3
+
+
+def test_real_plan_is_consistent():
+    """The 00:01 runner tracks main and CI is billing-blocked: a bad plan.json would lose a day."""
+    plan = json.loads((ROOT / "kaggle" / "plan.json").read_text())
+    for variant in plan["order"]:
+        assert (ROOT / "kaggle" / "variants" / f"{variant}.json").exists(), variant
+    start, freeze, end = (daily.parse_time(plan[k]) for k in ("start_utc", "freeze_utc", "end_utc"))
+    assert start < freeze < end

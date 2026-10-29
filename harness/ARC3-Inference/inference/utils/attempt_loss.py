@@ -111,8 +111,10 @@ class AttemptTracker:
         run = self.run
         self.hud = border_distance(new_grid, self.start, self.border)
         # a budget is only ever spent inside an attempt; anything that wins HUD cells back
-        # (an undo, a toggle, a refill pickup) starts the count again
-        self.run = run + 1 if self.hud + self.slack >= spent else 0
+        # (an undo, a toggle, a refill pickup) starts the count again. Actions taken while the
+        # HUD still matches the start do not count, so a stretch of idle presses followed by a
+        # border excursion and an exact return is not read as a loss (review of 2026-10-29).
+        self.run = run + 1 if (self.hud > 0 and self.hud + self.slack >= spent) else 0
         if undo or run < self.min_run or spent < self.min_spent:
             return False
         if self.hud >= spent or self.hud * self.ratio > spent:

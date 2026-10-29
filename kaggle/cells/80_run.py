@@ -91,6 +91,15 @@ if TRUE_SUBMISSION:
     _gateway_deadline = time.monotonic() + _gateway_wait_seconds()
     _wait_for_gateway(os.environ["ARC_BASE_URL"], _gateway_wait_seconds())
     bm.games = _competition_games_when_ready(_gateway_deadline) if _startup_hardening() else _competition_games()
+    if _startup_hardening():
+        # The per-game limit counts from game start, so a long gateway wait above would push
+        # play past Kaggle's 9 h wall and the scorecard would never close. Keep 4 minutes for
+        # teardown and clamp the limit to the notebook's real remaining time.
+        _left = 32400.0 - (time.time() - NOTEBOOK_START_TIME) - 240.0
+        if _left < bm.solver.max_runtime_s_per_game:
+            print(f"clamping max_runtime_s_per_game {bm.solver.max_runtime_s_per_game:.0f}s -> {_left:.0f}s "
+                  "(late gateway)", flush=True)
+            bm.solver.max_runtime_s_per_game = max(600.0, _left)
 else:
     competition_env_files = str(COMPETITION_DIR / "environment_files")
     bm.games = _offline_games(competition_env_files, SMOKE.get("games"))

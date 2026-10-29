@@ -116,6 +116,22 @@ RESET_INFO_ADDENDUM = (
     "or computation may precede it.\n"
 )
 
+# ARC3_RESET_GUARD=1 (with EXPOSE_RESET): the same bullet, with what RESET costs and when the
+# harness refuses it. Another entrant reported that exposing RESET displaced UNDO (152 -> 5 UNDO
+# calls in paired runs), hence the UNDO line.
+RESET_GUARDED_ADDENDUM = (
+    "- When available, `RESET` restarts the CURRENT level from its initial state: the board and "
+    "the remaining-actions bar are restored (and lives, in games that have them), and levels you "
+    "have already completed stay completed. It costs 1 action, and every action already spent on "
+    "this level still counts against your score. Use it when the level is in a state you cannot "
+    "recover from (you trapped yourself, lost the objective, or the bar cannot cover a plan) "
+    "instead of spending the rest of the bar or dying just to restart it. If `UNDO` is available, "
+    "use it to step back from a single mistake rather than RESET. A RESET is refused, and costs "
+    "nothing, when you have taken no other action on this level since it began or since your last "
+    "RESET, because the level is already at its start. RESET must be the first game action in a "
+    "Python snippet; inspection or computation may precede it.\n"
+)
+
 GAMEPLAY_CHANGED_ADDENDUM = (
     # One region, named once and referred back to twice. "outside that margin"
     # and "inside that border" both read as possibly including the border

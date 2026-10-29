@@ -25,6 +25,15 @@ def reset_exposed() -> bool:
     }
 
 
+def reset_guard_enabled() -> bool:
+    """ARC3_RESET_GUARD=1: refuse a model RESET that has nothing to restart (see
+    utils/reset_guard.py) and describe RESET accurately when it is exposed. Independent of
+    EXPOSE_RESET: RESET stays executable when hidden, so the refusal applies either way."""
+    return os.environ.get("ARC3_RESET_GUARD", "off").strip().lower() in {
+        "on", "1", "true", "yes",
+    }
+
+
 def undo_exposure_mode() -> str:
     """Read at call time; unset/invalid values preserve the original wiring.
 

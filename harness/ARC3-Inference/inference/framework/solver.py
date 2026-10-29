@@ -29,8 +29,10 @@ from inference.utils.animation import (
     normalize_frames,
     summarize_animation,
 )
+from inference.utils.attempt_loss import AttemptTracker
 from inference.agent.action_names import (
     reset_exposed,
+    reset_guard_enabled,
     to_engine_action,
     to_model_action,
     to_model_actions,
@@ -59,6 +61,7 @@ from inference.framework.kaggle import (
     duck_kaggle_setup_command,
     duck_kaggle_teardown_command,
 )
+from inference.utils.reset_guard import ResetGuard
 from inference.utils.viewer_artifacts import (
     append_raw_events_sidecar,
     reset_raw_events_sidecar,
@@ -111,6 +114,19 @@ WARMUP_KEEPALIVE_SECONDS = _env_number("ARC3_WARMUP_KEEPALIVE_SECONDS", 0.0, flo
 WARMUP_HEALTH_URL = os.environ.get("ARC3_WARMUP_HEALTH_URL", "").strip()
 WARMUP_KEEPALIVE_MAX_SECONDS = _env_number("ARC3_WARMUP_KEEPALIVE_MAX_SECONDS", 3 * 3600.0, float)
 
+# Start-up hardening (2026-10-29): since ~10-21 the Kaggle platform has been unstable, and a
+# 0.00 costs one of the last draws. Until the model server answers, the warmup RESETs are the
+# only moves the run makes, so one gateway error in them must not end the game (and with it the
+# keepalive and the run): with this on they are caught, logged and retried with backoff. The same
+# switch makes taaf.game_api retry a game's opening RESET, taaf.benchmark skip a game that still
+# cannot open, and the notebook wait up to an hour for the gateway. Off, nothing here changes.
+STARTUP_HARDENING = os.environ.get("ARC3_STARTUP_HARDENING", "0").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+
 
 def _health_ok(url: str, timeout: float = 5.0) -> bool:
     import urllib.request
@@ -132,18 +148,46 @@ def _keepalive_until_healthy(
     poll: float = 5.0,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
+    tolerant: bool = False,
+    due_now: bool = False,
+    retry_base: float = 10.0,
+    retry_cap: float = 60.0,
+    on_error: Callable[[Exception, int], None] | None = None,
 ) -> int:
     """Call `reset` every `interval` seconds until `healthy()` is true, the run is stopping, or
     `max_seconds` have passed; returns how many keepalive RESETs were issued. The caller has
-    already issued the first RESET, so the first keepalive comes `interval` seconds later."""
+    already issued the first RESET, so the first keepalive comes `interval` seconds later.
+
+    `tolerant`: a `reset` or `healthy` that raises is reported to `on_error(exc, failures)` and
+    does not end the loop. A failed RESET moved nothing, so it is retried after `retry_base`
+    seconds, doubling to `retry_cap` (never later than `interval`), rather than a full interval
+    later; only RESETs that went through count in the return value. `due_now` says the caller's
+    own first RESET failed, so one is due at once. The loop stays bounded by `max_seconds`."""
     start = last = clock()
-    issued = 0
+    wait = 0.0 if due_now else interval
+    issued = failures = 0
     while not should_stop() and clock() - start < max_seconds:
-        if healthy():
-            return issued
-        if clock() - last >= interval:
-            reset()
-            issued += 1
+        try:
+            if healthy():
+                return issued
+        except Exception:
+            if not tolerant:
+                raise
+        if clock() - last >= wait:
+            try:
+                reset()
+            except Exception as exc:
+                if not tolerant:
+                    raise
+                failures += 1
+                # the exponent is capped: a 3 h outage polled every 5 s would otherwise overflow it
+                wait = min(interval, retry_cap, retry_base * 2 ** min(failures - 1, 10))
+                if on_error is not None:
+                    on_error(exc, failures)
+            else:
+                issued += 1
+                failures = 0
+                wait = interval
             last = clock()
         sleep(poll)
     return issued
@@ -224,10 +268,26 @@ BATCH_NOOP_BLOCK = os.environ.get(
     "ARC3_BATCH_NOOP_BLOCK", "0"
 ).strip().lower() in ("1", "true", "yes", "on")
 
+# An attempt can be lost without a GAME_OVER: ls20 has three lives, and when the step bar
+# runs out the level restarts with the state still NOT_FINISHED. Nothing reports it, so a
+# batch kept playing its tail on the fresh attempt and the next opener said "You are still on
+# the same level." Six ls20 smoke runs lost 25 lives that way and ran 26 more actions of the
+# same snippets on the new attempt. utils/attempt_loss.py recognises the restart from the
+# frames alone. STOP ends the batch at that action and, through the sandbox's terminal latch,
+# the snippet; NOTICE makes the next opener say so (tool_agent.py). Either switches the
+# detector on, and each works without the other.
+ATTEMPT_LOSS_STOP = os.environ.get(
+    "ARC3_ATTEMPT_LOSS_STOP", "0"
+).strip().lower() in ("1", "true", "yes", "on")
+ATTEMPT_LOSS_DETECT = ATTEMPT_LOSS_STOP or os.environ.get(
+    "ARC3_ATTEMPT_LOSS_NOTICE", "0"
+).strip().lower() in ("1", "true", "yes", "on")
+
 
 _BLOCKED_VERDICTS = {
     "known_noop": "BLOCKED (known no-op in this exact board state; never executed)",
     "known_death": "BLOCKED (ended a previous attempt from this exact board state; never executed)",
+    "reset_refused": "BLOCKED (nothing to restart on this level; never executed)",
 }
 
 
@@ -242,6 +302,8 @@ def _action_verdict(item: dict) -> str:
         return "RUN COMPLETE"
     if item.get("level_completed"):
         return "LEVEL COMPLETED"
+    if item.get("attempt_lost"):
+        return "ATTEMPT LOST (the level restarted after this action; the game is not over)"
     changed = item.get("gameplay_changed")
     if changed is False:
         return (
@@ -538,6 +600,12 @@ class _HarnessGameSession:
     # history: the model reads it via animation() in the turn that follows,
     # and older animations are almost never what it is asking about.
     animation_record: dict[str, Any] | None = None
+    # Mirrors the engine's count of non-RESET actions on the current level, so a
+    # model RESET that would restart nothing (or wipe the game) can be refused.
+    reset_guard: ResetGuard = field(default_factory=ResetGuard, repr=False)
+    # The start board of the current attempt and the HUD's drift from it, kept only while
+    # ARC3_ATTEMPT_LOSS_STOP / _NOTICE is on.
+    attempt_tracker: AttemptTracker | None = field(default=None, repr=False)
     _viewer_events_flushed: int = field(default=0, init=False, repr=False)
 
     def current_frame(self) -> Frame:
@@ -695,15 +763,33 @@ class _HarnessGameSession:
                 "%s: warmup RESET issued before the analyzer is reachable",
                 run.game_id,
             )
-            self._execute_auto_reset()
+            first_reset_failed = False
+            if STARTUP_HARDENING:
+                # not fatal: the keepalive below retries it, and the game is already open
+                try:
+                    self._execute_auto_reset()
+                except Exception as exc:  # noqa: BLE001 - a gateway error must not end the game
+                    first_reset_failed = True
+                    log.warning(
+                        "%s: warmup RESET failed (%s: %s); retrying", run.game_id, type(exc).__name__, exc
+                    )
+            else:
+                self._execute_auto_reset()
             if WARMUP_KEEPALIVE_SECONDS > 0 and WARMUP_HEALTH_URL:
                 def _reset() -> None:
                     log.warning("%s: keepalive RESET; the analyzer is still loading", run.game_id)
                     self._execute_auto_reset()
 
+                def _reset_failed(exc: Exception, failures: int) -> None:
+                    log.warning(
+                        "%s: keepalive RESET failed %d time(s) (%s: %s); retrying",
+                        run.game_id, failures, type(exc).__name__, exc,
+                    )
+
                 issued = _keepalive_until_healthy(
                     _reset, lambda: _health_ok(WARMUP_HEALTH_URL), self.should_stop,
                     interval=WARMUP_KEEPALIVE_SECONDS, max_seconds=WARMUP_KEEPALIVE_MAX_SECONDS,
+                    tolerant=STARTUP_HARDENING, due_now=first_reset_failed, on_error=_reset_failed,
                 )
                 log.warning("%s: analyzer reachable after %d keepalive RESET(s)", run.game_id, issued)
         try:
@@ -1064,6 +1150,7 @@ class _HarnessGameSession:
             return self._terminal_payload(requested_actions)
 
         executed_payloads: list[dict[str, Any]] = []
+        attempt_lost_at: list[int] = []
         total_reward = 0.0
         stop_reason: str | None = None
         batch_size = len(requested_actions)
@@ -1073,6 +1160,7 @@ class _HarnessGameSession:
         ]
 
         guard_hook = getattr(self, "action_guard_hook", None)
+        guard_resets = reset_guard_enabled()
         blocked_detail: str | None = None
         blocked_kind: str | None = None
 
@@ -1089,6 +1177,16 @@ class _HarnessGameSession:
             if self.should_stop():
                 stop_reason = "stopped"
                 break
+            if guard_resets and action.id == arcengine.GameAction.RESET:
+                # Checked before every other guard so a refused RESET leaves no trace in
+                # their ledgers. Position N is judged against what positions 1..N-1
+                # actually executed, so [UP, RESET] passes and [RESET, RESET] does not.
+                refusal = self.reset_guard.refusal()
+                if refusal:
+                    blocked_kind = "reset_refused"
+                    blocked_detail = refusal
+                    stop_reason = blocked_kind
+                    break
             if (
                 stale_after
                 and batch_index == 1
@@ -1181,6 +1279,13 @@ class _HarnessGameSession:
             if payload.get("level_completed"):
                 stop_reason = "level_completed"
                 break
+            if payload.get("attempt_lost"):
+                attempt_lost_at.append(len(executed_payloads))
+                if ATTEMPT_LOSS_STOP:
+                    # the board the rest of the batch was planned against is gone, exactly
+                    # as after a game over, only nothing says so
+                    stop_reason = "attempt_lost"
+                    break
             if (
                 BATCH_NOOP_BLOCK
                 and NOOP_GUARD_BORDER_WIDTH > 0
@@ -1235,7 +1340,12 @@ class _HarnessGameSession:
             if item.get("game_over"):
                 final_payload["fatal_action"] = str(item.get("action_display") or "")
                 break
-        if batch_size > 1 or final_payload.get("game_over") or blocked_kind:
+        if attempt_lost_at:
+            # 1-based positions in the executed list, like the trace; without the stop a
+            # loss can sit mid-batch, where the final action's own payload would not show it
+            final_payload["attempt_lost"] = True
+            final_payload["attempt_lost_at"] = attempt_lost_at
+        if batch_size > 1 or final_payload.get("game_over") or blocked_kind or attempt_lost_at:
             final_payload["action_trace"] = _build_action_trace(
                 requested_displays, executed_payloads, blocked_kind
             )
@@ -1317,6 +1427,25 @@ class _HarnessGameSession:
         )
 
         completed = int(new_state.levels_completed)
+        is_reset = action.id == arcengine.GameAction.RESET
+        self.reset_guard.note_action(
+            is_reset=is_reset, level_changed=completed != previous_completed
+        )
+        if (
+            is_reset
+            and not automatic
+            and previous_completed > 0
+            and getattr(new_state.raw, "full_reset", False)
+        ):
+            # the guard only knows what this session executed; an engine that restarts a
+            # level on its own would show up here, after the fact, and nowhere else.
+            # warning, not info: see the warmup message in _play_inner.
+            log.warning(
+                "%s: a model RESET restarted the whole game (levels_completed %d -> %d)",
+                self.game.game_run.game_id if self.game.game_run else "?",
+                previous_completed,
+                completed,
+            )
         reward = float(completed - previous_completed) / max(
             1.0, float(self.game.number_of_levels)
         )
@@ -1352,6 +1481,29 @@ class _HarnessGameSession:
         level_completed = bool(
             new_state.just_won_level and raw_state != arcengine.GameState.WIN
         )
+        attempt_lost = False
+        if ATTEMPT_LOSS_DETECT:
+            if self.attempt_tracker is None:
+                self.attempt_tracker = AttemptTracker(border=NOOP_GUARD_BORDER_WIDTH)
+            if (
+                action.id == arcengine.GameAction.RESET
+                or level_completed
+                or raw_state != arcengine.GameState.NOT_FINISHED
+            ):
+                # a new attempt starts here (a game over is followed by its own RESET)
+                self.attempt_tracker.begin(new_grid)
+            else:
+                attempt_lost = self.attempt_tracker.observe(
+                    previous_grid,
+                    new_grid,
+                    undo=action.id == arcengine.GameAction.ACTION7,
+                )
+            if attempt_lost:
+                # the restart is this action's effect even when the piece ends up where it
+                # began, so it must not read as a no-op, arm the stale-state latch, or
+                # teach the repeat guard that the action does nothing from this board
+                gameplay_changed = True
+                no_op = False
         payload = {
             "executed": True,
             "action_num": self.action_count,
@@ -1378,6 +1530,8 @@ class _HarnessGameSession:
             "batch_size": batch_size,
             **self.timing_payload(),
         }
+        if attempt_lost:
+            payload["attempt_lost"] = True
         if animation_summary:
             payload["animation"] = animation_summary
             # the raw chain, for rendering an image in the opener. Dropped by
@@ -1390,7 +1544,7 @@ class _HarnessGameSession:
             "executed", "action_num", "level", "score", "state", "valid_actions",
             "board_changed", "gameplay_changed", "no_op", "done", "level_completed",
             "game_over", "run_complete", "action_name", "action_data", "action_display",
-            "animation", "automatic",
+            "animation", "automatic", "attempt_lost",
         )
         individual_result = copy.deepcopy({k: payload[k] for k in result_keys if k in payload})
         self.history_entries.append(

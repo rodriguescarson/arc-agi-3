@@ -11,6 +11,7 @@ import math
 import os
 import sys
 import threading
+import time
 import warnings
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -56,6 +57,44 @@ _ARCADE_LOGGER.setLevel(logging.WARNING)
 logging.getLogger("arc_agi.scorecard").setLevel(logging.WARNING)
 
 
+def _startup_hardening() -> bool:
+    """``ARC3_STARTUP_HARDENING``, read per call rather than at import so it can be set after the
+    module is loaded."""
+    return os.environ.get("ARC3_STARTUP_HARDENING", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _start_retry_seconds() -> float:
+    """How long opening a game may keep retrying a gateway error: 0 (one try, the upstream
+    behaviour) unless ``ARC3_STARTUP_HARDENING`` is on, then ``ARC3_START_RETRY_SECONDS`` (300)."""
+    if not _startup_hardening():
+        return 0.0
+    try:
+        return max(0.0, float(os.environ.get("ARC3_START_RETRY_SECONDS", "") or 300.0))
+    except ValueError:
+        return 300.0
+
+
+def _retry_transient(attempt, *, seconds, what, base=2.0, cap=30.0, clock=None, sleep=None, log=None):
+    """Return ``attempt()``; if it raises, wait ``base`` seconds (doubling up to ``cap``) and try
+    again, re-raising the last exception once ``seconds`` would be exceeded. ``seconds <= 0`` is a
+    single try, so the caller needs no separate branch for the unhardened path."""
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
+    start = clock()
+    tries = 0
+    while True:
+        try:
+            return attempt()
+        except Exception as exc:  # noqa: BLE001 - arc_agi hides the cause of a failed RESET
+            tries += 1
+            delay = min(cap, base * 2 ** min(tries - 1, 10))
+            if clock() - start + delay > seconds:
+                raise
+            if log is not None:
+                log.warning("%s failed (%s: %s); retry %d in %.0fs", what, type(exc).__name__, exc, tries, delay)
+            sleep(delay)
+
+
 @dataclass
 class _CompetitionScorecard:
     """Shared one-scorecard lifecycle for competition-mode Arcades."""
@@ -76,12 +115,12 @@ class _CompetitionScorecard:
             self.active_runs += 1
             return self.scorecard_id
 
-    def finish_run(self) -> arc_agi.EnvironmentScorecard | None:
+    def finish_run(self, close: bool = True) -> arc_agi.EnvironmentScorecard | None:
         with self._lock:
             if self.scorecard_id is None or self.closed:
                 return None
             self.active_runs -= 1
-            if self.active_runs > 0:
+            if self.active_runs > 0 or not close:
                 return None
             self.closed = True
             return self.arcade.close_scorecard(self.scorecard_id)
@@ -182,6 +221,7 @@ class GameAPI(Game):
 
         arcade = session.get_or_make(spec, _build_arcade)
         self._arcade = arcade
+        retry_s = _start_retry_seconds()
         competition_scorecard: _CompetitionScorecard | None = None
         scorecard_opened = False
         if spec.competition_sim or spec.operation_mode == arc_agi.OperationMode.COMPETITION:
@@ -193,19 +233,41 @@ class GameAPI(Game):
                 lambda: _CompetitionScorecard(arcade),
             )
             self._competition_scorecard = competition_scorecard
-            self._scorecard_id = competition_scorecard.open_run()
+            # only the first open reaches the gateway; after that a failure is a closed scorecard
+            self._scorecard_id = _retry_transient(
+                competition_scorecard.open_run,
+                seconds=retry_s if competition_scorecard.scorecard_id is None else 0.0,
+                what="scorecard open",
+                log=_ARCADE_LOGGER,
+            )
             scorecard_opened = True
         else:
             # Per-game scorecard so R11.12 can fetch this run's score in
             # isolation rather than disambiguating across passes/games
             # sharing the Arcade's default scorecard.
-            self._scorecard_id = arcade.create_scorecard()
+            self._scorecard_id = _retry_transient(
+                arcade.create_scorecard, seconds=retry_s, what="scorecard create", log=_ARCADE_LOGGER
+            )
+
+        def _make_env() -> arc_agi.EnvironmentWrapper | None:
+            env = arcade.make(self.env_name, scorecard_id=self._scorecard_id)
+            if retry_s > 0 and (env is None or env.observation_space is None):
+                # arc_agi swallows a failed metadata fetch or make-time RESET (a gateway
+                # error) and hands back None or a wrapper with no frame; raised here it is
+                # retried, rather than ending the game - or the run - further down.
+                raise RuntimeError(f"arc_agi.Arcade.make({self.env_name!r}) did not open the game")
+            return env
 
         try:
-            env = arcade.make(self.env_name, scorecard_id=self._scorecard_id)
+            # the make-time RESET is the game's first action
+            env = _retry_transient(
+                _make_env, seconds=retry_s, what=f"opening {self.env_name}", log=_ARCADE_LOGGER
+            )
         except Exception:
             if competition_scorecard is not None and scorecard_opened:
-                competition_scorecard.finish_run()
+                # hardened: leave the one scorecard open for the games still to come, even when
+                # this was the only run so far
+                competition_scorecard.finish_run(close=not _startup_hardening())
             raise
         if env is None:
             if competition_scorecard is not None and scorecard_opened:

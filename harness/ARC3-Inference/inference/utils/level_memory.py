@@ -68,6 +68,11 @@ def compute_solved_levels(history, max_actions_kept: int = 60) -> list:
         else:
             info["current"].append(action)
             info["total_actions"] += 1
+            if result.get("attempt_lost"):
+                # a restart with no RESET entry after it (ARC3_ATTEMPT_LOSS_*): the next
+                # action begins a new attempt, so this one's actions are not the winning route
+                info["attempts"] += 1
+                info["current"] = []
         completed = after > before or bool(result.get("level_completed"))
         if completed and not is_reset:
             info["winning_actions"] = list(info["current"])

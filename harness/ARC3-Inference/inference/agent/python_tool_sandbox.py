@@ -491,6 +491,11 @@ _SANDBOX_BOOTSTRAP = textwrap.dedent(
                 "the previous action reported run_complete. The run is finished and this "
                 "action was not executed."
             ),
+            "attempt_lost": (
+                "the previous action lost the attempt (stop_reason attempt_lost). The level "
+                "has restarted from its start board, so the board you planned against is gone "
+                "and this action was not executed. The next turn begins from the new state."
+            ),
         }
 
         def action(actions):
@@ -517,7 +522,7 @@ _SANDBOX_BOOTSTRAP = textwrap.dedent(
             for view in _animation_views:
                 view.invalidate()
             _refresh_state(reply.get("state") or {})
-            if action_result.get("stop_reason") == "reset_not_first":
+            if action_result.get("stop_reason") in ("reset_not_first", "reset_refused"):
                 raise RuntimeError(str(action_result.get("stop_detail")))
             if action_result.get("stop_reason") == "stale_state":
                 raise StaleStateActionError(
@@ -545,6 +550,10 @@ _SANDBOX_BOOTSTRAP = textwrap.dedent(
                         "run_complete" if _flag == "done" else _flag
                     )
                     break
+            if not _terminal_state and action_result.get("stop_reason") == "attempt_lost":
+                # a restart without a game over: the host only sets this stop_reason
+                # when ARC3_ATTEMPT_LOSS_STOP is on
+                _terminal_state.append("attempt_lost")
             _echo = action_result.pop("action_echo", None)
             if _echo:
                 # into the snippet's own stdout, so a loop can see what its

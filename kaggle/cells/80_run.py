@@ -56,6 +56,31 @@ def _wait_for_gateway(base_url: str, timeout_s: float = 600.0) -> None:
     raise RuntimeError(f"Kaggle gateway did not become ready: {last_error}")
 
 
+def _startup_hardening() -> bool:
+    return os.environ.get("ARC3_STARTUP_HARDENING", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _gateway_wait_seconds() -> float:
+    """The gateway and the game list share this budget: 600 s as upstream, an hour with start-up
+    hardening (the platform has been slow to bring things up since 2026-10-21)."""
+    return 3600.0 if _startup_hardening() else 600.0
+
+
+def _competition_games_when_ready(deadline: float):
+    """arc_agi.Arcade logs and swallows a failed /api/games fetch, so a gateway that answered the
+    wait above but then hiccuped surfaces here as "zero environments" and would end the notebook."""
+    delay = 5.0
+    while True:
+        try:
+            return _competition_games()
+        except Exception as exc:
+            if time.monotonic() + delay > deadline:
+                raise
+            print(f"competition game list not ready ({exc!r}); retrying in {delay:.0f}s", flush=True)
+            time.sleep(delay)
+            delay = min(delay * 2, 60.0)
+
+
 (WORKING_DIR / "git_status.txt").write_text((BUNDLE_DIR / "git_status.txt").read_text())
 os.environ.setdefault("RECORDINGS_DIR", str(WORKING_DIR / "server_recording"))
 
@@ -63,8 +88,18 @@ soft_end = None
 if TRUE_SUBMISSION:
     os.environ.setdefault("ARC_API_KEY", "test-key-123")
     os.environ.setdefault("ARC_BASE_URL", "http://gateway:8001/")
-    _wait_for_gateway(os.environ["ARC_BASE_URL"])
-    bm.games = _competition_games()
+    _gateway_deadline = time.monotonic() + _gateway_wait_seconds()
+    _wait_for_gateway(os.environ["ARC_BASE_URL"], _gateway_wait_seconds())
+    bm.games = _competition_games_when_ready(_gateway_deadline) if _startup_hardening() else _competition_games()
+    if _startup_hardening():
+        # The per-game limit counts from game start, so a long gateway wait above would push
+        # play past Kaggle's 9 h wall and the scorecard would never close. Keep 4 minutes for
+        # teardown and clamp the limit to the notebook's real remaining time.
+        _left = 32400.0 - (time.time() - NOTEBOOK_START_TIME) - 240.0
+        if _left < bm.solver.max_runtime_s_per_game:
+            print(f"clamping max_runtime_s_per_game {bm.solver.max_runtime_s_per_game:.0f}s -> {_left:.0f}s "
+                  "(late gateway)", flush=True)
+            bm.solver.max_runtime_s_per_game = max(600.0, _left)
 else:
     competition_env_files = str(COMPETITION_DIR / "environment_files")
     bm.games = _offline_games(competition_env_files, SMOKE.get("games"))

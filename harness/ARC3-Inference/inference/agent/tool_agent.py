@@ -28,7 +28,7 @@ from inference.utils.animation import (
     build_animation_view,
     describe_animation,
 )
-from inference.agent.action_names import reset_exposed, to_engine_action, to_model_action, undo_exposure_mode
+from inference.agent.action_names import reset_exposed, reset_guard_enabled, to_engine_action, to_model_action, undo_exposure_mode
 from inference.utils.retained_functions import function_signature
 from inference.utils.level_memory import compute_solved_levels, format_solved_levels
 from inference.agent.prompts import (
@@ -59,6 +59,7 @@ from inference.agent.prompts import (
     VISUAL_GAME_ADDENDUM,
     ACTION_INFO_ADDENDUM,
     UNDO_INFO_ADDENDUM,
+    RESET_GUARDED_ADDENDUM,
     RESET_INFO_ADDENDUM,
 )
 
@@ -346,6 +347,26 @@ def _format_valid_action_line(valid_actions: list[str] | None) -> str:
     return ", ".join(names)
 
 
+def _attempt_loss_notice_enabled() -> bool:
+    """Whether the opener says an attempt was lost without a GAME_OVER.
+
+    ARC3_ATTEMPT_LOSS_NOTICE, off by default. The solver detects the restart
+    (utils/attempt_loss.py) and records where in the sequence it happened."""
+    return _get_env_bool("ARC3_ATTEMPT_LOSS_NOTICE", False)
+
+
+def _attempt_loss_line(summary: dict[str, Any]) -> str | None:
+    """The one-line notice for a sequence that lost an attempt, or None."""
+    after = summary.get("attempt_lost_after")
+    if not after or not _attempt_loss_notice_enabled():
+        return None
+    skipped = int(summary.get("attempt_lost_skipped") or 0)
+    return (
+        f"Attempt lost after action {after}: the level restarted; plan from the new board."
+        + (f" The remaining {skipped} action(s) of that sequence were not executed." if skipped else "")
+    )
+
+
 def _terminal_action_reason(result: dict[str, Any]) -> str | None:
     if result.get("run_complete"):
         return "run_complete"
@@ -355,6 +376,8 @@ def _terminal_action_reason(result: dict[str, Any]) -> str | None:
         return "level_completed"
     if result.get("done"):
         return "done"
+    if result.get("stop_reason") == "attempt_lost":
+        return "attempt_lost"
     return None
 
 
@@ -375,6 +398,11 @@ def _terminal_action_stop_detail(reason: str | None) -> str:
         )
     if reason == "done":
         return "No further actions were executed because the environment reported done."
+    if reason == "attempt_lost":
+        return (
+            "No further actions were executed because the previous action lost the attempt: "
+            "the level restarted from its start board. Re-ground on the new board before acting again."
+        )
     return "No further actions were executed because the previous action reached a terminal state."
 
 
@@ -819,6 +847,28 @@ _RESUME_PROMPT_TIMEOUT = (
     "from them and call `action(actions)` with your best next action, keeping "
     "your reasoning short so the next request completes."
 )
+
+_LENGTH_CUT_NOTICE_KEPT = (
+    "Your previous reply was CUT OFF at the output limit before it made a tool "
+    "call, so nothing was executed. Your reasoning is still in context above: "
+    "do not redo it. Make one `python` call now - it can test your leading "
+    "hypothesis or act on it - and continue from its result."
+)
+
+_LENGTH_CUT_NOTICE_LOST = (
+    "Your previous reply was CUT OFF at the output limit before it made a tool "
+    "call, so nothing was executed. Keep your reasoning short this time and "
+    "make one `python` call early in your reply."
+)
+
+
+def _length_cut_notice(reasoning_kept: bool) -> str:
+    """What to tell the model after a reply ran out of tokens without a tool
+    call. The first wording claims the reasoning survived, so it is used only
+    when it did: the dead-reasoning stub and the repetition stub both replace
+    it."""
+    return _LENGTH_CUT_NOTICE_KEPT if reasoning_kept else _LENGTH_CUT_NOTICE_LOST
+
 
 _RESUME_PROMPT_TOOL_STEPS_EXHAUSTED = (
     "You used every available tool step this turn without calling "
@@ -2009,6 +2059,41 @@ def _prefer_tool_calls() -> bool:
     return _get_env_bool("ARC3_PREFER_TOOL_CALLS", False)
 
 
+def _truncation_recovery() -> bool:
+    """React to a reply that hit the output ceiling without calling a tool.
+
+    Measured on Franzen's Milestone-2 transcripts (100 plays, 9,362 replies),
+    87 replies ran to the 12,288-token ceiling and produced no tool call: 0.9%
+    of replies but about 6% of generated tokens, and 17-19% of the characters
+    in s5i5, wa30, re86, sk48 and g50t. Two things follow from the code as it
+    is:
+
+    - the model is never told. The next opener says only that the previous
+      exchange "produced no tool call", and the in-turn nudge opens with "You
+      have not acted yet. Investigate first.", which asks for more of what
+      just ran out. The reasoning in the follow-up reply has a long tail
+      (estimated from characters): median 990 tokens, mean 2,600, 90th
+      percentile 7,800.
+    - nothing limits the next one. 44 of the 87 cuts were not the first in
+      their play, and 31 of those were on the same level as the cut before.
+
+    On: the next request says plainly that the reply was cut off and, when it
+    is, that the reasoning is still in context; and for the rest of that level
+    requests are capped at ARC3_TRUNCATION_RECOVERY_CAP tokens. The cap is a
+    request parameter - not a chat-template argument, not part of the prompt -
+    so it cannot disturb the cached prefix. A new level starts with the full
+    ceiling.
+    """
+    return _get_env_bool("ARC3_TRUNCATION_RECOVERY", False)
+
+
+def _truncation_recovery_cap() -> int:
+    """Output ceiling for the rest of a level after a no-tool reply was cut off
+    (ARC3_TRUNCATION_RECOVERY). Zero keeps the notice and drops the cap; a cap
+    at or above the configured ceiling changes nothing."""
+    return max(0, _get_env_int("ARC3_TRUNCATION_RECOVERY_CAP", 6144))
+
+
 # Three bands, a million apart, so no calculated value can cross between them.
 # The maximum _game_priority is about 1,325.
 #
@@ -2818,7 +2903,7 @@ def _build_system_prompt(*, tool_output_tokens: int) -> str:
         if undo_exposure_mode() == "on":
             prompt += UNDO_INFO_ADDENDUM
         if reset_exposed():
-            prompt += RESET_INFO_ADDENDUM
+            prompt += RESET_GUARDED_ADDENDUM if reset_guard_enabled() else RESET_INFO_ADDENDUM
     prompt += (
         PYTHON_ADDENDUM_HEAD.replace(
             "- Every `python` tool call starts fresh. Re-import modules or re-define any custom utility logic you need.\n",
@@ -3678,6 +3763,12 @@ class ToolAgent:
         self._text_chars_per_token: float | None = None
         # index into the reasoning-effort ladder; -1 means "server default"
         self._reasoning_effort_rung: int = -1
+        # ARC3_TRUNCATION_RECOVERY: the level a no-tool reply was last cut off
+        # on (None until one is), whether the latest reply was such a cut, and
+        # whether its reasoning stayed in the history sent back
+        self._length_cut_level: int | None = None
+        self._length_cut_pending: bool = False
+        self._length_cut_kept: bool = False
         self._guard_death_override_batch: bool = False
         self._noop_guard_deaths_enabled: bool = _get_env_bool(
             "ARC3_DEATH_REPEAT_GUARD", False
@@ -3747,6 +3838,9 @@ class ToolAgent:
             self._turns_without_wm_update = 0
             self._pending_wm_rebuild_reason = ""
             self._pending_wm_revise_reason = ""
+            self._length_cut_level = None
+            self._length_cut_pending = False
+            self._length_cut_kept = False
 
     @property
     def total_tokens(self) -> int:
@@ -3822,6 +3916,8 @@ class ToolAgent:
                 verdict = "RUN COMPLETE"
             elif item.get("level_completed"):
                 verdict = "LEVEL COMPLETED"
+            elif item.get("attempt_lost"):
+                verdict = "ATTEMPT LOST (the level restarted after this action; the game is not over)"
             elif item.get("gameplay_changed") is False:
                 verdict = (
                     "NO-OP (executed, no change inside the board area)"
@@ -3844,12 +3940,24 @@ class ToolAgent:
 
         total_executed = 0
         executed_actions: list[str] = []
+        attempt_lost_after = None
+        attempt_lost_skipped = 0
         for item in executed_results:
             count = item.get("executed_count")
             try:
                 parsed = int(count) if count is not None else 1
             except (TypeError, ValueError):
                 parsed = 1
+            lost_at = item.get("attempt_lost_at")
+            if isinstance(lost_at, list) and lost_at:
+                # positions in this call's executed list, made turn-wide like the trace;
+                # the LAST loss is the one whose board the model is now looking at
+                attempt_lost_after = total_executed + int(lost_at[-1])
+                attempt_lost_skipped = (
+                    len(item.get("skipped_actions") or [])
+                    if item.get("stop_reason") == "attempt_lost"
+                    else 0
+                )
             total_executed += max(1, parsed)
             action_names = item.get("executed_actions")
             if isinstance(action_names, list):
@@ -3897,6 +4005,8 @@ class ToolAgent:
                 bool(item.get("gameplay_changed")) for item in executed_results
             ),
             "stop_reason": last.get("stop_reason"),
+            "attempt_lost_after": attempt_lost_after,
+            "attempt_lost_skipped": attempt_lost_skipped,
             "no_op_stops": [
                 {
                     "action": item.get("no_op_action"),
@@ -4924,6 +5034,9 @@ class ToolAgent:
             lines.append("The attempt ended and the level was reset.")
         else:
             lines.append(self._manual_reset_context_line(summary) or "You are still on the same level.")
+            attempt_loss_line = _attempt_loss_line(summary)
+            if attempt_loss_line:
+                lines.append(attempt_loss_line)
         step = summary.get("action_num")
         level = summary.get("level")
         if step is not None and level is not None:
@@ -5093,6 +5206,11 @@ class ToolAgent:
                     self._manual_reset_context_line(previous_step_summary)
                     or "You are still on the same level."
                 )
+                # right under the line that would otherwise leave the model believing
+                # nothing happened to its board
+                attempt_loss_line = _attempt_loss_line(previous_step_summary)
+                if attempt_loss_line:
+                    lines.append(attempt_loss_line)
             if previous_step_summary.get("game_over"):
                 lines.append(
                     "GAME OVER occurred during the previous sequence. This means the "
@@ -5324,6 +5442,33 @@ class ToolAgent:
                 },
             }
         ]
+
+    def _truncation_capped_max_tokens(self, level: int | None) -> int | None:
+        """max_tokens for the next request when it is lower than the configured
+        ceiling, else None (leave the ceiling alone). Only while
+        ARC3_TRUNCATION_RECOVERY is on, a no-tool reply was cut off earlier on
+        this same level, and the cap is below the ceiling."""
+        if not _truncation_recovery():
+            return None
+        cap = _truncation_recovery_cap()
+        cut_level = getattr(self, "_length_cut_level", None)
+        if cap <= 0 or cut_level is None or level != cut_level:
+            return None
+        ceiling = getattr(self, "_max_output_tokens", None)
+        if ceiling is not None and cap >= ceiling:
+            return None
+        return cap
+
+    def _take_length_cut_notice(self, resuming: bool) -> str:
+        """Text to put ahead of the opener of a turn that resumes after a reply
+        was cut off, or "". Consumed on every call: a cut that was rolled back
+        (a failed request clears the history it belongs to) must not be
+        announced later, so only a resumption that kept the history counts."""
+        pending = bool(getattr(self, "_length_cut_pending", False))
+        self._length_cut_pending = False
+        if not (pending and resuming and _truncation_recovery()):
+            return ""
+        return _length_cut_notice(bool(getattr(self, "_length_cut_kept", False))) + "\n\n"
 
     def _harness_template_kwargs(self) -> dict[str, Any]:
         """Chat-template kwargs the HARNESS sets per request.
@@ -5823,7 +5968,7 @@ class ToolAgent:
             compact["stopped_early"] = bool(payload.get("stopped_early"))
         # blocked_action names the refused action for the next turn's opener;
         # without it the model was told "the sequence was stopped before None"
-        for passthrough_key in ("no_op_action_index", "no_op_action", "skipped_actions", "gameplay_changed_per_action", "action_trace", "no_op", "fatal_action", "blocked_action", "action_echo", "animation"):
+        for passthrough_key in ("no_op_action_index", "no_op_action", "skipped_actions", "gameplay_changed_per_action", "action_trace", "no_op", "fatal_action", "blocked_action", "action_echo", "animation", "attempt_lost", "attempt_lost_at"):
             if passthrough_key in payload:
                 compact[passthrough_key] = payload.get(passthrough_key)
         if payload.get("stop_reason"):
@@ -6819,18 +6964,26 @@ class ToolAgent:
             # the turn cache for this one message
             self._pending_diff_image = self._turn_diff_image
             self._pending_diff_image_label = self._turn_diff_image_label
+        # "" unless the invocation this resumes ended on a reply cut off at the
+        # output ceiling (ARC3_TRUNCATION_RECOVERY); it leads whichever opener
+        # the resume mode picks
+        length_cut_notice = self._take_length_cut_notice(resuming_after_yield)
         if resume_mode == "state_only":
             opening_message = self._build_user_message(
-                _yield_resume_prompt(resume_reason) + "\n\n" + _STATE_ONLY_CAPTION,
+                length_cut_notice
+                + _yield_resume_prompt(resume_reason)
+                + "\n\n"
+                + _STATE_ONLY_CAPTION,
                 current_frame,
             )
         elif resume_mode == "short":
             opening_message = self._build_user_message(
-                _yield_resume_prompt(resume_reason), resume_frame
+                length_cut_notice + _yield_resume_prompt(resume_reason), resume_frame
             )
         else:
             opening_message = self._build_user_message(
-                user_prompt, resume_frame if resuming_after_yield else current_frame
+                length_cut_notice + user_prompt,
+                resume_frame if resuming_after_yield else current_frame,
             )
         # log what was actually SENT, not the argument that was passed in: on a
         # resumed invocation the short/state_only substitution happens here, so
@@ -6913,7 +7066,14 @@ class ToolAgent:
                     transcript="".join(transcript_parts),
                 )
                 try:
+                    # a request that fails after a cut has no reply to announce
+                    self._length_cut_pending = False
                     request_kwargs: dict[str, Any] = {"tools": tools}
+                    capped_max_tokens = self._truncation_capped_max_tokens(
+                        getattr(current_frame, "level", None)
+                    )
+                    if capped_max_tokens is not None:
+                        request_kwargs["max_tokens"] = capped_max_tokens
                     if request_timeout_seconds is not None:
                         request_kwargs["request_timeout_seconds"] = request_timeout_seconds
                     if self._save_request_logs:
@@ -7039,6 +7199,30 @@ class ToolAgent:
                     )
                     tool_calls = []
                     truncated_tool_call = str(result.finish_reason or "").strip() == "length"
+                # Set on EVERY reply, not only on a cut: the reply that ends
+                # the invocation is the one that decides whether the next
+                # opener announces a cut, and a later complete reply clears it.
+                # A cut inside a tool call counts too - the tokens are gone
+                # either way - though it keeps its own, more specific nudge.
+                length_cut = (
+                    _truncation_recovery()
+                    and str(result.finish_reason or "").strip() == "length"
+                    and not tool_calls
+                )
+                self._length_cut_pending = length_cut
+                if length_cut:
+                    self._length_cut_level = getattr(current_frame, "level", None)
+                    level_cap = self._truncation_capped_max_tokens(self._length_cut_level)
+                    append_transcript(
+                        "ANALYZER STATUS",
+                        "length_cut: the reply reached the output limit without a tool call; "
+                        "the next request says so"
+                        + (
+                            f" and replies on this level are capped at {level_cap} tokens."
+                            if level_cap is not None
+                            else "."
+                        ),
+                    )
                 response_meta = _format_model_response_meta(
                     finish_reason=result.finish_reason,
                     served_by=result.served_by,
@@ -7131,10 +7315,20 @@ class ToolAgent:
                                 "stub",
                             )
                         self._append_context_message(messages, assistant_message)
+                    # read AFTER the stubs above: they replace the reasoning
+                    # this records as kept
+                    self._length_cut_kept = any(
+                        assistant_message.get(_reasoning_key)
+                        for _reasoning_key in _reasoning_history_keys()
+                    )
                     yielded_control_reason = control_yield_reason()
                     if yielded_control_reason is not None:
                         break
                     followup_prefix = "You have not acted yet. Investigate first. "
+                    if length_cut and not truncated_tool_call:
+                        # "Investigate first" asks for more of what just ran
+                        # out. (A cut inside a tool call has its own wording.)
+                        followup_prefix = _length_cut_notice(self._length_cut_kept) + " "
                     if truncated_tool_call:
                         # the only signal the model gets that LENGTH, not
                         # formatting, is why its call vanished

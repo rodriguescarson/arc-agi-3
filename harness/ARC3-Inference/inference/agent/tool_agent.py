@@ -28,7 +28,7 @@ from inference.utils.animation import (
     build_animation_view,
     describe_animation,
 )
-from inference.agent.action_names import reset_exposed, to_engine_action, to_model_action, undo_exposure_mode
+from inference.agent.action_names import reset_exposed, reset_guard_enabled, to_engine_action, to_model_action, undo_exposure_mode
 from inference.utils.retained_functions import function_signature
 from inference.utils.level_memory import compute_solved_levels, format_solved_levels
 from inference.agent.prompts import (
@@ -59,6 +59,7 @@ from inference.agent.prompts import (
     VISUAL_GAME_ADDENDUM,
     ACTION_INFO_ADDENDUM,
     UNDO_INFO_ADDENDUM,
+    RESET_GUARDED_ADDENDUM,
     RESET_INFO_ADDENDUM,
 )
 
@@ -2818,7 +2819,7 @@ def _build_system_prompt(*, tool_output_tokens: int) -> str:
         if undo_exposure_mode() == "on":
             prompt += UNDO_INFO_ADDENDUM
         if reset_exposed():
-            prompt += RESET_INFO_ADDENDUM
+            prompt += RESET_GUARDED_ADDENDUM if reset_guard_enabled() else RESET_INFO_ADDENDUM
     prompt += (
         PYTHON_ADDENDUM_HEAD.replace(
             "- Every `python` tool call starts fresh. Re-import modules or re-define any custom utility logic you need.\n",

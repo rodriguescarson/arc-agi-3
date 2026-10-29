@@ -31,6 +31,7 @@ from inference.utils.animation import (
 )
 from inference.agent.action_names import (
     reset_exposed,
+    reset_guard_enabled,
     to_engine_action,
     to_model_action,
     to_model_actions,
@@ -59,6 +60,7 @@ from inference.framework.kaggle import (
     duck_kaggle_setup_command,
     duck_kaggle_teardown_command,
 )
+from inference.utils.reset_guard import ResetGuard
 from inference.utils.viewer_artifacts import (
     append_raw_events_sidecar,
     reset_raw_events_sidecar,
@@ -269,6 +271,7 @@ BATCH_NOOP_BLOCK = os.environ.get(
 _BLOCKED_VERDICTS = {
     "known_noop": "BLOCKED (known no-op in this exact board state; never executed)",
     "known_death": "BLOCKED (ended a previous attempt from this exact board state; never executed)",
+    "reset_refused": "BLOCKED (nothing to restart on this level; never executed)",
 }
 
 
@@ -579,6 +582,9 @@ class _HarnessGameSession:
     # history: the model reads it via animation() in the turn that follows,
     # and older animations are almost never what it is asking about.
     animation_record: dict[str, Any] | None = None
+    # Mirrors the engine's count of non-RESET actions on the current level, so a
+    # model RESET that would restart nothing (or wipe the game) can be refused.
+    reset_guard: ResetGuard = field(default_factory=ResetGuard, repr=False)
     _viewer_events_flushed: int = field(default=0, init=False, repr=False)
 
     def current_frame(self) -> Frame:
@@ -1132,6 +1138,7 @@ class _HarnessGameSession:
         ]
 
         guard_hook = getattr(self, "action_guard_hook", None)
+        guard_resets = reset_guard_enabled()
         blocked_detail: str | None = None
         blocked_kind: str | None = None
 
@@ -1148,6 +1155,16 @@ class _HarnessGameSession:
             if self.should_stop():
                 stop_reason = "stopped"
                 break
+            if guard_resets and action.id == arcengine.GameAction.RESET:
+                # Checked before every other guard so a refused RESET leaves no trace in
+                # their ledgers. Position N is judged against what positions 1..N-1
+                # actually executed, so [UP, RESET] passes and [RESET, RESET] does not.
+                refusal = self.reset_guard.refusal()
+                if refusal:
+                    blocked_kind = "reset_refused"
+                    blocked_detail = refusal
+                    stop_reason = blocked_kind
+                    break
             if (
                 stale_after
                 and batch_index == 1
@@ -1376,6 +1393,25 @@ class _HarnessGameSession:
         )
 
         completed = int(new_state.levels_completed)
+        is_reset = action.id == arcengine.GameAction.RESET
+        self.reset_guard.note_action(
+            is_reset=is_reset, level_changed=completed != previous_completed
+        )
+        if (
+            is_reset
+            and not automatic
+            and previous_completed > 0
+            and getattr(new_state.raw, "full_reset", False)
+        ):
+            # the guard only knows what this session executed; an engine that restarts a
+            # level on its own would show up here, after the fact, and nowhere else.
+            # warning, not info: see the warmup message in _play_inner.
+            log.warning(
+                "%s: a model RESET restarted the whole game (levels_completed %d -> %d)",
+                self.game.game_run.game_id if self.game.game_run else "?",
+                previous_completed,
+                completed,
+            )
         reward = float(completed - previous_completed) / max(
             1.0, float(self.game.number_of_levels)
         )

@@ -517,7 +517,7 @@ _SANDBOX_BOOTSTRAP = textwrap.dedent(
             for view in _animation_views:
                 view.invalidate()
             _refresh_state(reply.get("state") or {})
-            if action_result.get("stop_reason") == "reset_not_first":
+            if action_result.get("stop_reason") in ("reset_not_first", "reset_refused"):
                 raise RuntimeError(str(action_result.get("stop_detail")))
             if action_result.get("stop_reason") == "stale_state":
                 raise StaleStateActionError(

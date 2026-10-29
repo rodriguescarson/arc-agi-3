@@ -338,6 +338,14 @@
       "transient": true,
       "variant": "v1s-baseline6",
       "version": null
+    },
+    {
+      "at": "2026-10-29T13:46:40.193061+00:00",
+      "error": "kernel push failed: Warning: Looks like you're using an outdated `kaggle` version (installed: 2.2.4), please consider upgrading to the latest version (2.2.5)\nKernel push error: Maximum batch GPU session count of 2 reached.",
+      "note": "forced re-push (kaggle/force_push.sh)",
+      "transient": true,
+      "variant": "v1s-baseline6",
+      "version": null
     }
   ],
   "submissions": [

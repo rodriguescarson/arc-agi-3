@@ -24,6 +24,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -108,6 +109,22 @@ def variant_kernel(owner: str, variant: str) -> str:
     return f"{owner}/{cfg['kernel_slug']}"
 
 
+RETRYABLE = ("429", "Too Many Requests", "500", "502", "503", "504", "timed out", "Connection")
+
+
+def with_retry(fn, tries: int = 6, delay: float = 20.0, sleep=time.sleep):
+    """Kaggle rate-limits ListSubmissions and kernels_status (429 for minutes at a time, seen
+    2026-10-28 while other sessions downloaded outputs): retry with a growing pause instead of
+    losing the day's tick. Non-transient errors raise at once."""
+    for i in range(tries):
+        try:
+            return fn()
+        except Exception as exc:  # noqa: BLE001
+            if i == tries - 1 or not any(m in str(exc) for m in RETRYABLE):
+                raise
+            sleep(delay * (i + 1))
+
+
 # ----------------------------------------------------------------------------- kaggle client
 
 class KaggleClient:
@@ -121,7 +138,7 @@ class KaggleClient:
 
     def submissions(self, competition: str) -> list[Submission]:
         out = []
-        for s in self.api.competition_submissions(competition):
+        for s in with_retry(lambda: self.api.competition_submissions(competition, page_size=100)) or []:
             score = getattr(s, "public_score", None)
             try:
                 score = float(score) if score not in (None, "", "None") else None
@@ -131,7 +148,7 @@ class KaggleClient:
         return out
 
     def kernel_status(self, kernel: str) -> str:
-        r = self.api.kernels_status(kernel)
+        r = with_retry(lambda: self.api.kernels_status(kernel))
         status = getattr(r, "status", None) or (r.get("status") if isinstance(r, dict) else None)
         return str(status).split(".")[-1].upper()
 
@@ -182,11 +199,17 @@ class KaggleClient:
 
         cmd = [build_notebook.kaggle_bin(), "competitions", "submit", "-c", competition, "-k", kernel,
                "-v", str(version), "-f", file_name, "-m", message]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        text = ((proc.stdout or "") + (proc.stderr or "")).strip()
-        if proc.returncode != 0:
-            raise RuntimeError(f"submit failed: {text[-400:]}")
-        return text
+        def once() -> str:
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+            text = ((proc.stdout or "") + (proc.stderr or "")).strip()
+            if proc.returncode != 0:
+                raise RuntimeError(f"submit failed: {text[-400:]}")
+            return text
+
+        # Only rate limits and 5xx are retried: those mean the submission was not accepted. A
+        # garbled reply ("Expecting value") may hide an accepted one, so it is not retried here;
+        # the backstop tick re-checks the slot later.
+        return with_retry(once, tries=4)
 
 
 def classify_served_model(text: str) -> str:

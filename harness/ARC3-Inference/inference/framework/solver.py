@@ -111,6 +111,19 @@ WARMUP_KEEPALIVE_SECONDS = _env_number("ARC3_WARMUP_KEEPALIVE_SECONDS", 0.0, flo
 WARMUP_HEALTH_URL = os.environ.get("ARC3_WARMUP_HEALTH_URL", "").strip()
 WARMUP_KEEPALIVE_MAX_SECONDS = _env_number("ARC3_WARMUP_KEEPALIVE_MAX_SECONDS", 3 * 3600.0, float)
 
+# Start-up hardening (2026-10-29): since ~10-21 the Kaggle platform has been unstable, and a
+# 0.00 costs one of the last draws. Until the model server answers, the warmup RESETs are the
+# only moves the run makes, so one gateway error in them must not end the game (and with it the
+# keepalive and the run): with this on they are caught, logged and retried with backoff. The same
+# switch makes taaf.game_api retry a game's opening RESET, taaf.benchmark skip a game that still
+# cannot open, and the notebook wait up to an hour for the gateway. Off, nothing here changes.
+STARTUP_HARDENING = os.environ.get("ARC3_STARTUP_HARDENING", "0").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+
 
 def _health_ok(url: str, timeout: float = 5.0) -> bool:
     import urllib.request
@@ -132,18 +145,46 @@ def _keepalive_until_healthy(
     poll: float = 5.0,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
+    tolerant: bool = False,
+    due_now: bool = False,
+    retry_base: float = 10.0,
+    retry_cap: float = 60.0,
+    on_error: Callable[[Exception, int], None] | None = None,
 ) -> int:
     """Call `reset` every `interval` seconds until `healthy()` is true, the run is stopping, or
     `max_seconds` have passed; returns how many keepalive RESETs were issued. The caller has
-    already issued the first RESET, so the first keepalive comes `interval` seconds later."""
+    already issued the first RESET, so the first keepalive comes `interval` seconds later.
+
+    `tolerant`: a `reset` or `healthy` that raises is reported to `on_error(exc, failures)` and
+    does not end the loop. A failed RESET moved nothing, so it is retried after `retry_base`
+    seconds, doubling to `retry_cap` (never later than `interval`), rather than a full interval
+    later; only RESETs that went through count in the return value. `due_now` says the caller's
+    own first RESET failed, so one is due at once. The loop stays bounded by `max_seconds`."""
     start = last = clock()
-    issued = 0
+    wait = 0.0 if due_now else interval
+    issued = failures = 0
     while not should_stop() and clock() - start < max_seconds:
-        if healthy():
-            return issued
-        if clock() - last >= interval:
-            reset()
-            issued += 1
+        try:
+            if healthy():
+                return issued
+        except Exception:
+            if not tolerant:
+                raise
+        if clock() - last >= wait:
+            try:
+                reset()
+            except Exception as exc:
+                if not tolerant:
+                    raise
+                failures += 1
+                # the exponent is capped: a 3 h outage polled every 5 s would otherwise overflow it
+                wait = min(interval, retry_cap, retry_base * 2 ** min(failures - 1, 10))
+                if on_error is not None:
+                    on_error(exc, failures)
+            else:
+                issued += 1
+                failures = 0
+                wait = interval
             last = clock()
         sleep(poll)
     return issued
@@ -695,15 +736,33 @@ class _HarnessGameSession:
                 "%s: warmup RESET issued before the analyzer is reachable",
                 run.game_id,
             )
-            self._execute_auto_reset()
+            first_reset_failed = False
+            if STARTUP_HARDENING:
+                # not fatal: the keepalive below retries it, and the game is already open
+                try:
+                    self._execute_auto_reset()
+                except Exception as exc:  # noqa: BLE001 - a gateway error must not end the game
+                    first_reset_failed = True
+                    log.warning(
+                        "%s: warmup RESET failed (%s: %s); retrying", run.game_id, type(exc).__name__, exc
+                    )
+            else:
+                self._execute_auto_reset()
             if WARMUP_KEEPALIVE_SECONDS > 0 and WARMUP_HEALTH_URL:
                 def _reset() -> None:
                     log.warning("%s: keepalive RESET; the analyzer is still loading", run.game_id)
                     self._execute_auto_reset()
 
+                def _reset_failed(exc: Exception, failures: int) -> None:
+                    log.warning(
+                        "%s: keepalive RESET failed %d time(s) (%s: %s); retrying",
+                        run.game_id, failures, type(exc).__name__, exc,
+                    )
+
                 issued = _keepalive_until_healthy(
                     _reset, lambda: _health_ok(WARMUP_HEALTH_URL), self.should_stop,
                     interval=WARMUP_KEEPALIVE_SECONDS, max_seconds=WARMUP_KEEPALIVE_MAX_SECONDS,
+                    tolerant=STARTUP_HARDENING, due_now=first_reset_failed, on_error=_reset_failed,
                 )
                 log.warning("%s: analyzer reachable after %d keepalive RESET(s)", run.game_id, issued)
         try:

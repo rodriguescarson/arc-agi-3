@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import os
 import pickle
 import time
 import traceback
@@ -20,6 +21,9 @@ import taaf.support
 
 if TYPE_CHECKING:
     import taaf.deploy
+
+# With ARC3_STARTUP_HARDENING, how many games in a row may fail to open before run() gives up.
+_MAX_START_FAILURES_IN_A_ROW = 3
 
 
 @dataclass
@@ -142,6 +146,11 @@ class Benchmark:
         solver_task: asyncio.Task[None] | None = None
         periodic_task: asyncio.Task[None] | None = None
         deadline_task: asyncio.Task[None] | None = None
+        # ARC3_STARTUP_HARDENING: one game that still cannot be opened (GameAPI has already
+        # retried it) is left unplayed instead of the exception ending the run with every other
+        # game unstarted; consecutive failures mean the gateway is down, and the run stops as before.
+        skip_unopenable = os.environ.get("ARC3_STARTUP_HARDENING", "0").strip().lower() in ("1", "true", "yes", "on")
+        failed_in_a_row = 0
         # Setup runs inside this try so the finally below tears down every
         # game/resource opened here — including when the duplicate-id
         # validation (or an interrupt) fires mid-setup, before the solver runs.
@@ -149,7 +158,25 @@ class Benchmark:
             for pass_idx in range(self.n_passes):
                 for game in self.games:
                     game_copy = copy.deepcopy(game)
-                    game_copy.start_game(session)
+                    try:
+                        game_copy.start_game(session)
+                    except Exception as e:
+                        failed_in_a_row += 1
+                        # an AssertionError is start_game's own check failing after the
+                        # scorecard run was opened, which nothing would close
+                        if (
+                            not skip_unopenable
+                            or isinstance(e, AssertionError)
+                            or failed_in_a_row >= _MAX_START_FAILURES_IN_A_ROW
+                        ):
+                            raise
+                        print(
+                            f"\n[Benchmark.run] could not start {getattr(game, 'env_name', game)!r} "
+                            f"({type(e).__name__}: {e}); skipping it and playing the rest.",
+                            flush=True,
+                        )
+                        continue
+                    failed_in_a_row = 0
                     assert game_copy.game_run is not None
                     self.game_runs.append(game_copy.game_run)
                     to_play.append(game_copy)
@@ -157,8 +184,10 @@ class Benchmark:
                 # can't be checked until the first pass has opened its games;
                 # do it before opening any more (later passes legitimately
                 # repeat the same ids).
-                if pass_idx == 0 and len({r.game_id for r in self.game_runs}) != len(self.games):
+                if pass_idx == 0 and len({r.game_id for r in self.game_runs}) != len(self.game_runs):
                     raise ValueError("duplicate game_ids in benchmark.games are not allowed")
+            if not to_play:
+                raise RuntimeError("no game could be started")
 
             solver_task = asyncio.create_task(played_solver.run_games(to_play))
             self._solver_task = solver_task

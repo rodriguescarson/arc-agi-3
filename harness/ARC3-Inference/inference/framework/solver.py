@@ -29,6 +29,7 @@ from inference.utils.animation import (
     normalize_frames,
     summarize_animation,
 )
+from inference.utils.attempt_loss import AttemptTracker
 from inference.agent.action_names import (
     reset_exposed,
     reset_guard_enabled,
@@ -267,6 +268,21 @@ BATCH_NOOP_BLOCK = os.environ.get(
     "ARC3_BATCH_NOOP_BLOCK", "0"
 ).strip().lower() in ("1", "true", "yes", "on")
 
+# An attempt can be lost without a GAME_OVER: ls20 has three lives, and when the step bar
+# runs out the level restarts with the state still NOT_FINISHED. Nothing reports it, so a
+# batch kept playing its tail on the fresh attempt and the next opener said "You are still on
+# the same level." Six ls20 smoke runs lost 25 lives that way and ran 26 more actions of the
+# same snippets on the new attempt. utils/attempt_loss.py recognises the restart from the
+# frames alone. STOP ends the batch at that action and, through the sandbox's terminal latch,
+# the snippet; NOTICE makes the next opener say so (tool_agent.py). Either switches the
+# detector on, and each works without the other.
+ATTEMPT_LOSS_STOP = os.environ.get(
+    "ARC3_ATTEMPT_LOSS_STOP", "0"
+).strip().lower() in ("1", "true", "yes", "on")
+ATTEMPT_LOSS_DETECT = ATTEMPT_LOSS_STOP or os.environ.get(
+    "ARC3_ATTEMPT_LOSS_NOTICE", "0"
+).strip().lower() in ("1", "true", "yes", "on")
+
 
 _BLOCKED_VERDICTS = {
     "known_noop": "BLOCKED (known no-op in this exact board state; never executed)",
@@ -286,6 +302,8 @@ def _action_verdict(item: dict) -> str:
         return "RUN COMPLETE"
     if item.get("level_completed"):
         return "LEVEL COMPLETED"
+    if item.get("attempt_lost"):
+        return "ATTEMPT LOST (the level restarted after this action; the game is not over)"
     changed = item.get("gameplay_changed")
     if changed is False:
         return (
@@ -585,6 +603,9 @@ class _HarnessGameSession:
     # Mirrors the engine's count of non-RESET actions on the current level, so a
     # model RESET that would restart nothing (or wipe the game) can be refused.
     reset_guard: ResetGuard = field(default_factory=ResetGuard, repr=False)
+    # The start board of the current attempt and the HUD's drift from it, kept only while
+    # ARC3_ATTEMPT_LOSS_STOP / _NOTICE is on.
+    attempt_tracker: AttemptTracker | None = field(default=None, repr=False)
     _viewer_events_flushed: int = field(default=0, init=False, repr=False)
 
     def current_frame(self) -> Frame:
@@ -1129,6 +1150,7 @@ class _HarnessGameSession:
             return self._terminal_payload(requested_actions)
 
         executed_payloads: list[dict[str, Any]] = []
+        attempt_lost_at: list[int] = []
         total_reward = 0.0
         stop_reason: str | None = None
         batch_size = len(requested_actions)
@@ -1257,6 +1279,13 @@ class _HarnessGameSession:
             if payload.get("level_completed"):
                 stop_reason = "level_completed"
                 break
+            if payload.get("attempt_lost"):
+                attempt_lost_at.append(len(executed_payloads))
+                if ATTEMPT_LOSS_STOP:
+                    # the board the rest of the batch was planned against is gone, exactly
+                    # as after a game over, only nothing says so
+                    stop_reason = "attempt_lost"
+                    break
             if (
                 BATCH_NOOP_BLOCK
                 and NOOP_GUARD_BORDER_WIDTH > 0
@@ -1311,7 +1340,12 @@ class _HarnessGameSession:
             if item.get("game_over"):
                 final_payload["fatal_action"] = str(item.get("action_display") or "")
                 break
-        if batch_size > 1 or final_payload.get("game_over") or blocked_kind:
+        if attempt_lost_at:
+            # 1-based positions in the executed list, like the trace; without the stop a
+            # loss can sit mid-batch, where the final action's own payload would not show it
+            final_payload["attempt_lost"] = True
+            final_payload["attempt_lost_at"] = attempt_lost_at
+        if batch_size > 1 or final_payload.get("game_over") or blocked_kind or attempt_lost_at:
             final_payload["action_trace"] = _build_action_trace(
                 requested_displays, executed_payloads, blocked_kind
             )
@@ -1447,6 +1481,29 @@ class _HarnessGameSession:
         level_completed = bool(
             new_state.just_won_level and raw_state != arcengine.GameState.WIN
         )
+        attempt_lost = False
+        if ATTEMPT_LOSS_DETECT:
+            if self.attempt_tracker is None:
+                self.attempt_tracker = AttemptTracker(border=NOOP_GUARD_BORDER_WIDTH)
+            if (
+                action.id == arcengine.GameAction.RESET
+                or level_completed
+                or raw_state != arcengine.GameState.NOT_FINISHED
+            ):
+                # a new attempt starts here (a game over is followed by its own RESET)
+                self.attempt_tracker.begin(new_grid)
+            else:
+                attempt_lost = self.attempt_tracker.observe(
+                    previous_grid,
+                    new_grid,
+                    undo=action.id == arcengine.GameAction.ACTION7,
+                )
+            if attempt_lost:
+                # the restart is this action's effect even when the piece ends up where it
+                # began, so it must not read as a no-op, arm the stale-state latch, or
+                # teach the repeat guard that the action does nothing from this board
+                gameplay_changed = True
+                no_op = False
         payload = {
             "executed": True,
             "action_num": self.action_count,
@@ -1473,6 +1530,8 @@ class _HarnessGameSession:
             "batch_size": batch_size,
             **self.timing_payload(),
         }
+        if attempt_lost:
+            payload["attempt_lost"] = True
         if animation_summary:
             payload["animation"] = animation_summary
             # the raw chain, for rendering an image in the opener. Dropped by
@@ -1485,7 +1544,7 @@ class _HarnessGameSession:
             "executed", "action_num", "level", "score", "state", "valid_actions",
             "board_changed", "gameplay_changed", "no_op", "done", "level_completed",
             "game_over", "run_complete", "action_name", "action_data", "action_display",
-            "animation", "automatic",
+            "animation", "automatic", "attempt_lost",
         )
         individual_result = copy.deepcopy({k: payload[k] for k in result_keys if k in payload})
         self.history_entries.append(

@@ -48,6 +48,20 @@ def test_solved_levels_tracks_attempts_and_winning_sequence():
     assert l2["attempts"] == 1
 
 
+def test_a_lost_attempt_with_no_reset_entry_starts_a_new_attempt():
+    # ARC3_ATTEMPT_LOSS_*: a life lost mid-level restarts the board without a RESET in the history
+    hist = [
+        E("", F(1)),
+        E("UP", F(1)),
+        E("UP", F(1), {"attempt_lost": True}),
+        E("LEFT", F(1)),
+        E("UP", F(2), {"level_completed": True}),
+    ]
+    (l1,) = compute_solved_levels(hist)
+    assert l1["winning_actions"] == ["LEFT", "UP"]
+    assert l1["attempts"] == 2 and l1["total_actions"] == 4
+
+
 def test_truncation_keeps_the_tail():
     hist = [E("", F(1))] + [E("UP", F(1)) for _ in range(100)] + [E("SPACE", F(2), {"level_completed": True})]
     out = compute_solved_levels(hist, max_actions_kept=10)

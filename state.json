@@ -450,6 +450,13 @@
       "message": "arc3-auto variant=v1f-multithread-load kernel=carsonrodrigues/arc3-duck-v1f-franzen-multithread-load version=1 rev=827df12 model=unknown",
       "variant": "v1f-multithread-load",
       "version": 1
+    },
+    {
+      "at": "2026-10-30T00:01:10.549123+00:00",
+      "kernel": "carsonrodrigues/arc3-duck-v10-v1f-harness-fixes",
+      "message": "arc3-auto variant=v10-harness-fixes kernel=carsonrodrigues/arc3-duck-v10-v1f-harness-fixes version=1 rev=b722bad model=unknown",
+      "variant": "v10-harness-fixes",
+      "version": 1
     }
   ]
 }

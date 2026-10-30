@@ -2,8 +2,10 @@
 # Push GPU commits for the named variants as soon as Kaggle's weekly GPU quota allows, retrying
 # every RETRY seconds (default 1800) until each has pushed or DEADLINE (UTC, default
 # 2026-11-01T18:00:00Z) passes, then record each pushed version on the automation/state branch the
-# way force_push.sh does. Quota and session-count refusals are retried; anything else stops that
-# variant. Start it detached so it outlives the Claude session:
+# way force_push.sh does. Every refusal is retried, not just quota and session-count ones: on
+# 2026-10-30 an empty Kaggle reply ("Expecting value: line 1 column 1") was taken as permanent and
+# dropped a trial, and a push that can never succeed only costs one API call per RETRY seconds.
+# Start it detached so it outlives the Claude session:
 #   nohup python3 -c "import os,subprocess; os.setsid(); subprocess.run(['kaggle/push_when_quota.sh','v11-stall-rule','v11-stall-medium'])" >/dev/null 2>&1 &
 set -u
 cd "$(dirname "$0")/.."
@@ -35,10 +37,8 @@ PY
       (cd "$tmp" && git add state.json && if ! git diff --cached --quiet; then git -c user.name=arc3-bot -c user.email=arc3-bot@users.noreply.github.com commit -qm "state $(date -u +%FT%TZ) (push_when_quota $v v$ver)" && git push -q origin HEAD:automation/state; fi)
       git worktree remove --force "$tmp"; git checkout -q -- kaggle/state.json 2>/dev/null
       echo "=== $(date -u +%FT%TZ) pushed $v v$ver and recorded it" >> "$log"
-    elif echo "$out" | grep -qiE "quota|Maximum batch GPU session"; then
-      still+=("$v")
     else
-      echo "=== $(date -u +%FT%TZ) $v: non-retryable push error, giving up on it" >> "$log"
+      still+=("$v")
     fi
   done
   pending=(${still[@]+"${still[@]}"})

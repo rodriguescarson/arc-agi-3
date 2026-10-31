@@ -28,7 +28,7 @@ file.
 
 | # | when | who | step |
 |---|---|---|---|
-| 1 | by 2 Nov 23:59 | Carson | Kaggle, ARC-AGI-3 competition, Submissions: select the two finals. Recommended 57372857 (29.93) and 57477157 (29.54); swap one for a v10 draw only if it beats 29.93. The paper keeps linking 57477157. |
+| 1 | by 2 Nov 23:59 | Carson | Kaggle, ARC-AGI-3 competition, Submissions: select the two finals: 57372857 (v1, 29.93) and 57820036 (v10, 29.78), Carson's call on 31 Oct; a 1 or 2 Nov v10 draw above 29.78 replaces 57820036. The paper keeps linking 57477157 (v2), which need not be a final: the paper prize asks only for a linked working submission, and Kaggle scores every submission on the private set. |
 | 2 | 3 Nov | Claude, on Carson's go | Copy the paper folder into `rodriguescarson/arc-prize-2026` as `paper/level-transfer/` (the ~/Research repo holds other papers and stays private). |
 | 3 | 3 Nov | Carson | Make public: GitHub `rodriguescarson/arc-agi-3` and `rodriguescarson/arc-prize-2026` (Settings, Danger Zone, Change visibility). Kaggle datasets `arc3-harness-bundle` (licence: Apache 2.0, the strictest of its parts) and `py312-portable` (licence: Other, PSF): Settings, Sharing, Public. Kaggle notebooks `carsonrodrigues/arc3-duck-v2-level-memory-budget-bar` and the reproduce notebook: Share, Public. |
 | 4 | 3 Nov | Claude | Verify: both repos public, both datasets and both notebooks public, every link resolves logged out, secrets scan re-run, the v2 notebook's **version 2** URL (the linked submission's kernel) copied for step 5. |

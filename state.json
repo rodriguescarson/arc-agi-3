@@ -402,6 +402,14 @@
       "note": "push_when_quota.sh",
       "variant": "v11-stall-rule",
       "version": 1
+    },
+    {
+      "at": "2026-10-31T00:12:24.554181+00:00",
+      "error": null,
+      "kernel": "carsonrodrigues/arc3-duck-v11m-stall-rule-effort-medium",
+      "note": "push_when_quota.sh",
+      "variant": "v11-stall-medium",
+      "version": 1
     }
   ],
   "submissions": [

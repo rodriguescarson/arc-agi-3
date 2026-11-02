@@ -1,0 +1,14 @@
+Third-party code in this repository
+
+The LICENSE file (MIT-0) covers the code and text written by Carson Rodrigues. It does not cover:
+
+- harness/ARC3-Inference: Apache License 2.0, Daniel Franzen (2026), the ARC-AGI-3 Milestone-2 solution
+  (https://github.com/da-fr/arc-agi-3-solution). Licence text: harness/LICENSE.franzen-apache-2.0.
+  It builds on Tufa Labs' Duck harness (https://github.com/Tufalabs/duck-harness). Changes made to it by
+  Carson Rodrigues are in this repository's git history.
+- harness/tufa-arc-agi-framework (TAAF, "ARC-AGI3 orchestration framework by Tufa Labs"): MIT, Tufa Labs, as
+  vendored alongside ARC3-Inference. MIT is declared through package metadata (the "License :: OSI Approved ::
+  MIT License" classifier in harness/ARC3-Inference/pyproject.toml); no separate licence file ships with it.
+
+Model weights and the serving wheelhouse are third-party artefacts under their own licences; they are
+referenced by Kaggle dataset or model id and are not vendored here.

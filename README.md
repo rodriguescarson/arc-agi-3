@@ -46,7 +46,7 @@ Python 3.13 image workaround: `docs/RUNBOOK_KAGGLE.md`. Why this plan: `docs/PLA
 
 ## Licences
 
-Our code: MIT-0 (see LICENSE). `harness/ARC3-Inference` is Apache-2.0 (Daniel Franzen, 2026,
+Our code: MIT-0 (see LICENSE; third-party parts are listed in NOTICE). `harness/ARC3-Inference` is Apache-2.0 (Daniel Franzen, 2026,
 on top of Tufa Labs' MIT Duck harness); `harness/tufa-arc-agi-framework` is MIT (Tufa Labs).
 Model weights and the serving wheelhouse are third-party artefacts under their own licences;
 they are referenced by Kaggle dataset/model id, not vendored.

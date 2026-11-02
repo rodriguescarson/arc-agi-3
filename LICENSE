@@ -1,4 +1,4 @@
-MIT No Attribution (MIT-0)
+MIT No Attribution
 
 Copyright 2026 Carson Rodrigues
 
@@ -13,9 +13,3 @@ NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPO
 NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
----
-
-This applies to files outside `harness/`. `harness/ARC3-Inference` is Apache License 2.0
-(Daniel Franzen; see harness/LICENSE.franzen-apache-2.0) building on Tufa Labs' MIT-licensed
-Duck harness; `harness/tufa-arc-agi-framework` is MIT (Tufa Labs).

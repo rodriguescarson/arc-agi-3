@@ -46,3 +46,13 @@ linked to writeups public when the competition ends.
 - ARC Prize 2026 paper-track writeups (kaggle.com/competitions/arc-prize-2026-paper-track/writeups).
 - The ARC-AGI-3 discussion forum, especially "solution" posts after 2 Nov.
 - arcprize.org results and the ARC Prize 2026 technical report when published.
+- Suggested in a guide Carson pasted on 2 Nov (links not yet checked): the ARC community leaderboard
+  (arcprize.org/leaderboard/community), which lists agents built on executable world models, planning and hypothesis
+  falsification; the ARC-AGI-3 Kaggle starter kit (github.com/arcprize/ARC-AGI-3-Kaggle-Starter); practical
+  ARC-AGI-3 write-ups at makaroff.ai/arc-agi-3; and the ARC Prize 2025 winner interviews and papers
+  (arcprize.org/competitions/2025: NVARC, the ARChitects, TRM, CompressARC). For each top 2026 agent, note its
+  representation, how it generated and verified candidate actions, how it handled failed attempts, and how it spent
+  compute.
+- For the paper side: 2024 recognised 8 of 47 papers and 2025 recognised 16 of 90 (3 placed, 5 runners-up, 8
+  honourable mentions); the top places went to new methods with one named mechanism, and analysis papers to the
+  lower tiers (checked 2 Nov; see the 2 Nov paper revision in arc-prize-2026 PR #4).

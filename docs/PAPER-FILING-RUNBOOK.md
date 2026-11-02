@@ -32,9 +32,33 @@ file.
 | 2 | 3 Nov | Claude, on Carson's go | Copy the paper folder into `rodriguescarson/arc-prize-2026` as `paper/level-transfer/` (the ~/Research repo holds other papers and stays private). |
 | 3 | 3 Nov | Carson | Make public: GitHub `rodriguescarson/arc-agi-3` and `rodriguescarson/arc-prize-2026` (Settings, Danger Zone, Change visibility). Kaggle datasets `arc3-harness-bundle` (licence: Apache 2.0, the strictest of its parts) and `py312-portable` (licence: Other, PSF): Settings, Sharing, Public. Kaggle notebooks `carsonrodrigues/arc3-duck-v2-level-memory-budget-bar` and the reproduce notebook: Share, Public. |
 | 4 | 3 Nov | Claude | Verify: both repos public, both datasets and both notebooks public, every link resolves logged out, secrets scan re-run, the v2 notebook's **version 2** URL (the linked submission's kernel) copied for step 5. |
-| 5 | 6 or 7 Nov | Carson | Kaggle paper-track writeup, **Edit** (never delete and recreate; one per team). Paste `writeup_v2.md` as the body. Set the title and subtitle below. Cover: `paper/figures/card_560x280.png`. Project links: the PDF as the main paper (link to `paper/level-transfer/paper/paper_full.pdf` in the public arc-prize-2026 repo), the v2 notebook version 2 URL, both repos. Track: Main Track. Save, then read Kaggle's word counter (must be at most 1,500). |
+| 5 | **done 2 Nov** (Claude, in Carson's Chrome, on his request) | Claude | Kaggle paper-track writeup edited in place and saved with "Update Submission": body = `writeup_v2.md` without its H1 (8,652 characters, 1,436 words by `wc -w`), the subtitle below, the rebuilt card. Read back live: new subtitle and body, status Submitted, both notebook project links kept. Backup of the replaced 28 Oct body: scratchpad `filing/live_oct28_body.md`. Kaggle's own deadline for edits: 9 Nov 23:59 UTC. |
+| 5a | by 8 Nov | Carson | Kaggle's upload buttons open the macOS file picker, which Claude cannot drive. In the writeup editor: **Files, Upload Files**: `~/Research/22-arc-agi3-level-transfer/paper/paper_full.pdf` (the main paper). **Media gallery**: the old figure still shows "1,237 testable pairs, 25 games, 95.6%" and "pre-registered bar"; add `paper/figures/fig6_e21_transfer.png` (1,186 pairs, 23 games, 99.7%) and remove the old one. Then Update Submission. |
+| 5b | after 4 | Carson | Project links: replace the v2 notebook link (it opens the latest version 4, 19.75) with the **version 2** URL (`?scriptVersionId=` of version 2, 29.54, rev 4033b27); add both repos once public. |
 | 6 | 6 or 7 Nov | Carson | arcprize.org: update the separate paper entry with the same title, the PDF link and the linked submission 57477157. |
-| 7 | after 5 | Claude | Read the live writeup back and check it against the local files. |
+| 7 | after 3 and 5a | Claude | Read the live writeup back logged out: every link resolves, the PDF opens, and the "Code, data and every experiment log are released with the paper" sentence is true (it is not until step 3). |
+
+### Release checklist for steps 2 and 3 (pre-flight check, 2 Nov)
+
+- Copy an allow-list, not the folder: `HYPOTHESES.md`, `paper/paper_full.{md,pdf}`, `paper/writeup_v2.md`,
+  `paper/figures/{fig6_e21_transfer,card_560x280}.png`, `paper/make_fig_e21.py`, `paper/make_card_560x280.py`,
+  `experiments/` (E21 json and out, `level1_cost_check.{py,out}`), plus a new short public README. Leave out the
+  screen, `RUBRIC_SCORECARD.md`, `cover.png`, `draft.md`, `OUTLINE_v2.md`, `writeup_clean.md` (internal or v1 framing).
+- The public README maps the paper's code paths: `inference/utils/level_memory.py` is
+  `harness/ARC3-Inference/inference/utils/level_memory.py` in arc-agi-3; `arc3/agents/model_based.py` is
+  `src/arc_prize_2026/arc3/agents/model_based.py` in arc-prize-2026.
+- Make the two scripts portable: `experiments/level1_cost_check.py` (ROOT is an absolute path) and
+  `paper/make_fig_e21.py` (sys.path uses the home directory); re-run and diff against the committed outputs.
+- arc-prize-2026: the default branch `main` is behind `paper/llm-arm-results` (SUBMISSIONS rows, LLM draws) and
+  still holds the old v1 paper files; the branch lacks the MIT-0 `LICENSE` that main has. Merge the branch into
+  main by PR before the flip and check that `LICENSE`, all draw rows and the removal of the stale paper files land.
+- Licences: GitHub reads both `LICENSE` files as "Other" (NOASSERTION) because of the "(MIT-0)" title and the
+  appended harness note; use the plain SPDX MIT-0 text and move the note to README or NOTICE. Add a NOTICE for
+  `data/human_replays_packed/` (derived from the ARC Prize human replay release; source names no licence) and for
+  the Tufa harness (MIT declared only in `pyproject.toml`). `arc3-harness-bundle`: licence "Other", description
+  stating MIT-0 for Carson's files, Apache-2.0 Franzen, MIT Tufa.
+- `pyproject.toml` in arc-prize-2026 lists a personal gmail address; confirm or change before the flip.
+- Leaving files out does not unpublish git history (gitleaks over all 155 commits: no findings); accept that.
 
 ## Labels for the writeup
 

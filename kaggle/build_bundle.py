@@ -9,6 +9,7 @@ the rerun).  Tufa Labs and Daniel Franzen ship a *source bundle* dataset with th
     benchmark_initial.pkl          pickled TAAF Benchmark (25 public games + HarnessSolver)
     deploy_target.pkl              pickled Kaggle deploy target (carries max_runtime_s)
     README.dataset.md
+    LICENSE.franzen-apache-2.0, LICENSE-MIT-0.txt, NOTICE   licence texts and third-party notice
 
 Franzen's notebook attaches Tufa's unchanged bundle and `git apply`s a 500 KB patch at boot.
 We instead publish our own bundle built from `harness/` so the notebook needs no patch step
@@ -35,7 +36,25 @@ HARNESS = ROOT / "harness"
 PICKLE_SOURCE = ROOT / "data" / "bundles" / "taaf-kaggle-source-bundle-copy"
 OUT = ROOT / "kaggle" / "build" / "bundle"
 DATASET_ID = "carsonrodrigues/arc3-harness-bundle"
-DATASET_TITLE = "arc3-harness-bundle"
+DATASET_TITLE = "ARC-AGI-3 LLM Agent Harness (ARC Prize 2026)"
+DATASET_SUBTITLE = "Duck + Franzen Milestone-2 LLM agent harness source for ARC-AGI-3 notebooks"
+DATASET_DESCRIPTION = ROOT / "kaggle" / "datasets" / "arc3-harness-bundle.md"
+DATASET_KEYWORDS = ["games", "artificial intelligence", "computer science", "programming", "python", "software", "benchmark"]
+LICENCE_FILES = {
+    "LICENSE.franzen-apache-2.0": HARNESS / "LICENSE.franzen-apache-2.0",
+    "LICENSE-MIT-0.txt": ROOT / "LICENSE",
+    "NOTICE": ROOT / "NOTICE",
+}
+RESOURCES = [
+    {"path": "README.dataset.md", "description": "Contents, licences and the git revision this bundle was built from"},
+    {"path": "benchmark_initial.pkl", "description": "Tufa Labs' pickled TAAF benchmark, copied verbatim from dfranzen/taaf-kaggle-source-bundle-copy"},
+    {"path": "deploy_target.pkl", "description": "Tufa Labs' pickled Kaggle deploy target, copied verbatim from dfranzen/taaf-kaggle-source-bundle-copy"},
+    {"path": "git_status.txt", "description": "Git revision of rodriguescarson/arc-agi-3 the bundle was built from"},
+    {"path": "preamble.txt", "description": "One-line build note"},
+    {"path": "LICENSE.franzen-apache-2.0", "description": "Apache-2.0 licence of Daniel Franzen's ARC3-Inference fork"},
+    {"path": "LICENSE-MIT-0.txt", "description": "MIT-0 licence of the code written for this entry"},
+    {"path": "NOTICE", "description": "Third-party notice: which parts are Apache-2.0, MIT and MIT-0"},
+]
 
 SKIP_DIRS = {"__pycache__", ".pytest_cache", ".ruff_cache", ".git", "viewer", "tests"}
 SKIP_SUFFIXES = {".pyc", ".lock"}
@@ -87,6 +106,8 @@ def build() -> Path:
         if not src.is_file():
             sys.exit(f"missing {src}: download dfranzen/taaf-kaggle-source-bundle-copy into data/bundles first")
         shutil.copy2(src, OUT / name)
+    for name, src in LICENCE_FILES.items():
+        shutil.copy2(src, OUT / name)
     (OUT / "git_status.txt").write_text(f"arc-agi-3 harness bundle built from {_git_rev()}\n")
     (OUT / "preamble.txt").write_text("arc-agi-3 harness bundle (carsonrodrigues). See README.dataset.md.\n")
     (OUT / "README.dataset.md").write_text(
@@ -96,13 +117,22 @@ def build() -> Path:
         "  with this repository's changes on top.\n"
         "- `src/tufa-arc-agi-framework`: TAAF, Tufa Labs (MIT).\n"
         "- `benchmark_initial.pkl`, `deploy_target.pkl`: copied verbatim from\n"
-        "  `dfranzen/taaf-kaggle-source-bundle-copy` (Tufa Labs' original bundle).\n\n"
+        "  `dfranzen/taaf-kaggle-source-bundle-copy` (Tufa Labs' original bundle).\n"
+        "- `LICENSE.franzen-apache-2.0`, `LICENSE-MIT-0.txt`, `NOTICE`: the licence texts. Franzen's fork,\n"
+        "  including the edits inside its files, is Apache-2.0; the new modules written for this entry are\n"
+        "  MIT-0; TAAF is MIT as stated by Tufa Labs (see NOTICE).\n\n"
         f"Built from git revision {_git_rev()}; tree sha256 {_tree_sha(OUT / 'src')[:16]}.\n"
     )
+    # `kaggle datasets version` sends subtitle, description, keywords and resources from this file
+    # and blanks any that are missing, so all of them are written on every build.
     (OUT / "dataset-metadata.json").write_text(json.dumps({
         "title": DATASET_TITLE,
+        "subtitle": DATASET_SUBTITLE,
+        "description": DATASET_DESCRIPTION.read_text(),
         "id": DATASET_ID,
-        "licenses": [{"name": "Apache 2.0"}],
+        "licenses": [{"name": "apache-2.0"}],
+        "keywords": DATASET_KEYWORDS,
+        "resources": RESOURCES,
     }, indent=2) + "\n")
     print(f"bundle: {n} source files -> {OUT}  (src sha {_tree_sha(OUT / 'src')[:16]}, git {_git_rev()})")
     return OUT

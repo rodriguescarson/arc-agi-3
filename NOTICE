@@ -10,5 +10,10 @@ The LICENSE file (MIT-0) covers the code and text written by Carson Rodrigues. I
   vendored alongside ARC3-Inference. MIT is declared through package metadata (the "License :: OSI Approved ::
   MIT License" classifier in harness/ARC3-Inference/pyproject.toml); no separate licence file ships with it.
 
+- data/python312/cpython-3.12.15+20261009-x86_64-unknown-linux-gnu-install_only.tar.gz: an unmodified
+  python-build-standalone build (Astral, https://github.com/astral-sh/python-build-standalone, release 20261009)
+  of CPython 3.12.15. CPython is under the Python Software Foundation License; the archive carries CPython's
+  LICENSE.txt and the licences of the libraries it bundles. SHA-256 in data/python312/SHA256SUMS.
+
 Model weights and the serving wheelhouse are third-party artefacts under their own licences; they are
 referenced by Kaggle dataset or model id and are not vendored here.

@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the paper below."
+type: software
+title: "arc-agi-3: an LLM agent and Kaggle pipeline for ARC-AGI-3 (ARC Prize 2026)"
+authors:
+  - family-names: Rodrigues
+    given-names: Carson
+repository-code: "https://github.com/rodriguescarson/arc-agi-3"
+url: "https://www.kaggle.com/competitions/arc-prize-2026-arc-agi-3"
+license: MIT-0
+date-released: 2026-11-03
+keywords:
+  - ARC-AGI-3
+  - ARC Prize 2026
+  - LLM agents
+  - agent harness
+  - Kaggle
+  - SGLang
+  - Qwen
+abstract: >-
+  An ARC Prize 2026 ARC-AGI-3 entry: Qwen3.8-Flash-Next served by SGLang plays each game through Tufa Labs' Duck
+  harness as extended by Daniel Franzen, with level memory and reliability changes, a notebook builder and a daily
+  Kaggle submission scheduler. Third-party code keeps its own licence (see NOTICE).
+preferred-citation:
+  type: generic
+  title: "What should an agent carry from one level to the next?"
+  authors:
+    - family-names: Rodrigues
+      given-names: Carson
+  year: 2026
+  url: "https://github.com/rodriguescarson/arc-prize-2026/blob/main/paper/level-transfer/paper/paper_full.pdf"
+  publisher:
+    name: "Kaggle"
+  collection-title: "ARC Prize 2026 Paper Track"
+  abstract: >-
+    An ARC-AGI-3 agent that has solved level k can reuse on level k+1 either the plan it used or the mechanics it
+    learned. The paper tests both on 340 human replay sessions, in an ablation of a model-based agent, and on paired
+    hidden-set draws of an LLM harness.

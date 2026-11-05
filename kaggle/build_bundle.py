@@ -37,7 +37,7 @@ PICKLE_SOURCE = ROOT / "data" / "bundles" / "taaf-kaggle-source-bundle-copy"
 OUT = ROOT / "kaggle" / "build" / "bundle"
 DATASET_ID = "carsonrodrigues/arc3-harness-bundle"
 DATASET_TITLE = "ARC-AGI-3 LLM Agent Harness (ARC Prize 2026)"
-DATASET_SUBTITLE = "Duck + Franzen Milestone-2 LLM agent harness source for ARC-AGI-3 notebooks"
+DATASET_SUBTITLE = "Carson Rodrigues' ARC-AGI-3 LLM agent harness for ARC Prize 2026 notebooks"
 DATASET_DESCRIPTION = ROOT / "kaggle" / "datasets" / "arc3-harness-bundle.md"
 # Kaggle refuses a version with more than five tags ("exceeded the max category limit").
 DATASET_KEYWORDS = ["artificial intelligence", "games", "computer science", "python", "benchmark"]

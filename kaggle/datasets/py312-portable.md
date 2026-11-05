@@ -26,6 +26,10 @@ subprocess.run(["/tmp/venv312/bin/pip", "--version"], check=True)
 
 The two paths cover Kaggle's two dataset mount layouts. The ARC Prize 2026 GPU notebooks `carsonrodrigues/arc3-duck-*` use the archive this way: when the notebook's Python is not 3.12, they try this interpreter first and fall back to a system Python 3.12 only if it fails a standard-library import check (`kaggle/cells/00_env.py` in https://github.com/rodriguescarson/arc-agi-3).
 
+## Author
+
+Packaged and maintained by [Carson Rodrigues](https://carsonrodrigues.com) for his ARC Prize 2026 notebooks (paper and code: https://carsonrodrigues.com/research#paper-22). CPython is by the Python Software Foundation and this build by the python-build-standalone project; the archive is their release, unchanged.
+
 ## Licence
 
 CPython is distributed under the Python Software Foundation License; the archive includes CPython's `LICENSE.txt`, and the upstream release lists the licences of the libraries it bundles.

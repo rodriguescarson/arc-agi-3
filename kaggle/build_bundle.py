@@ -39,7 +39,8 @@ DATASET_ID = "carsonrodrigues/arc3-harness-bundle"
 DATASET_TITLE = "ARC-AGI-3 LLM Agent Harness (ARC Prize 2026)"
 DATASET_SUBTITLE = "Duck + Franzen Milestone-2 LLM agent harness source for ARC-AGI-3 notebooks"
 DATASET_DESCRIPTION = ROOT / "kaggle" / "datasets" / "arc3-harness-bundle.md"
-DATASET_KEYWORDS = ["games", "artificial intelligence", "computer science", "programming", "python", "software", "benchmark"]
+# Kaggle refuses a version with more than five tags ("exceeded the max category limit").
+DATASET_KEYWORDS = ["artificial intelligence", "games", "computer science", "python", "benchmark"]
 LICENCE_FILES = {
     "LICENSE.franzen-apache-2.0": HARNESS / "LICENSE.franzen-apache-2.0",
     "LICENSE-MIT-0.txt": ROOT / "LICENSE",

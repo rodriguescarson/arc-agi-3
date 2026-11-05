@@ -16,6 +16,11 @@ Account: `carsonrodrigues` (token in `~/.kaggle/kaggle.json`). CLI: `.venv/bin/k
 Re-run `build_bundle.py --push` after every harness change; it versions the dataset.
 Make both datasets **public** before the deadline (prize rule).
 
+Both datasets are public since 5 Nov 2026. If an upload stops at "Starting upload for file ..." with 0%, the cause is
+this machine's broken IPv6 route: Python tries each IPv6 address of www.googleapis.com with no timeout, while curl
+falls back to IPv4. Run the push with a `sitecustomize.py` on `PYTHONPATH` that limits `socket.getaddrinfo` to
+`AF_INET` (an upload on 5 Nov worked this way); the stale state in `$TMPDIR/.kaggle/uploads/` can be deleted.
+
 ## Build and commit a variant
 
 ```bash

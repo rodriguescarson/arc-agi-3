@@ -20,11 +20,26 @@ On the 55 hidden ARC-AGI-3 games scored on the public leaderboard, the best draw
 
 ## Links
 
+- Author: Carson Rodrigues, https://carsonrodrigues.com (paper and links: https://carsonrodrigues.com/research#paper-22)
 - Competition: https://www.kaggle.com/competitions/arc-prize-2026-arc-agi-3
 - Paper (PDF): https://github.com/rodriguescarson/arc-prize-2026/blob/main/paper/level-transfer/paper/paper_full.pdf, also filed as a writeup in the ARC Prize 2026 Paper Track: https://www.kaggle.com/competitions/arc-prize-2026-paper-track
 - Harness and deployment code: https://github.com/rodriguescarson/arc-agi-3
 - Paper code, data and experiment logs: https://github.com/rodriguescarson/arc-prize-2026
 - Companion dataset: https://www.kaggle.com/datasets/carsonrodrigues/py312-portable (Python 3.12 for the cp312 wheelhouses)
+
+## Author and citation
+
+Built and maintained by [Carson Rodrigues](https://carsonrodrigues.com) ([Kaggle](https://www.kaggle.com/carsonrodrigues), [GitHub](https://github.com/rodriguescarson)); the Duck harness is by Tufa Labs and its Milestone-2 extension by Daniel Franzen, as the table above says. To cite the work:
+
+```bibtex
+@misc{rodrigues2026carry,
+  author       = {Rodrigues, Carson},
+  title        = {What should an agent carry from one level to the next?},
+  year         = {2026},
+  howpublished = {ARC Prize 2026 Paper Track entry, Kaggle},
+  url          = {https://github.com/rodriguescarson/arc-prize-2026/blob/main/paper/level-transfer/paper/paper_full.pdf}
+}
+```
 
 ## Licence
 

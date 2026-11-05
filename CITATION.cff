@@ -5,6 +5,8 @@ title: "arc-agi-3: an LLM agent and Kaggle pipeline for ARC-AGI-3 (ARC Prize 202
 authors:
   - family-names: Rodrigues
     given-names: Carson
+    orcid: "https://orcid.org/0009-0001-7195-6742"
+    website: "https://carsonrodrigues.com"
 repository-code: "https://github.com/rodriguescarson/arc-agi-3"
 url: "https://www.kaggle.com/competitions/arc-prize-2026-arc-agi-3"
 license: MIT-0
@@ -27,6 +29,8 @@ preferred-citation:
   authors:
     - family-names: Rodrigues
       given-names: Carson
+      orcid: "https://orcid.org/0009-0001-7195-6742"
+      website: "https://carsonrodrigues.com"
   year: 2026
   url: "https://github.com/rodriguescarson/arc-prize-2026/blob/main/paper/level-transfer/paper/paper_full.pdf"
   publisher:

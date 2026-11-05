@@ -4,6 +4,8 @@ An LLM agent harness and Kaggle notebook pipeline for ARC-AGI-3: Carson Rodrigue
 competition [arc-prize-2026-arc-agi-3](https://www.kaggle.com/competitions/arc-prize-2026-arc-agi-3)
 (final submissions closed 2026-11-02 23:59 UTC).
 
+By [Carson Rodrigues](https://carsonrodrigues.com) ([Kaggle](https://www.kaggle.com/carsonrodrigues), [ORCID](https://orcid.org/0009-0001-7195-6742)). The paper and every public part of the entry are listed at [carsonrodrigues.com/research](https://carsonrodrigues.com/research#paper-22).
+
 The agent is an LLM in a Python REPL: Qwen3.8-Flash-Next (Intel AutoRound W4A16 + Albucino MTP
 draft, served by SGLang "Pennyroyal") plays each game through Tufa Labs' Duck harness as extended
 by Daniel Franzen for Milestone 2. This repository owns the deployment pipeline, the configuration
@@ -55,6 +57,20 @@ PYTHONPATH=. .venv/bin/python -m pytest
 
 Then "Submit to Competition" on the kernel page (one per day). Details, hazards and the
 Python 3.13 image workaround: `docs/RUNBOOK_KAGGLE.md`. Why this plan: `docs/PLAN.md`.
+
+## Author and citation
+
+[Carson Rodrigues](https://carsonrodrigues.com) is the author of this entry, its harness changes, the notebook pipeline and the paper. GitHub's "Cite this repository" button reads `CITATION.cff`; in BibTeX:
+
+```bibtex
+@misc{rodrigues2026carry,
+  author       = {Rodrigues, Carson},
+  title        = {What should an agent carry from one level to the next?},
+  year         = {2026},
+  howpublished = {ARC Prize 2026 Paper Track entry, Kaggle},
+  url          = {https://github.com/rodriguescarson/arc-prize-2026/blob/main/paper/level-transfer/paper/paper_full.pdf}
+}
+```
 
 ## Licences
 

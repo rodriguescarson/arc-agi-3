@@ -1,13 +1,25 @@
-# arc-agi-3 — ARC Prize 2026, ARC-AGI-3 track
+# ARC-AGI-3 LLM agent for ARC Prize 2026 (Kaggle)
 
-Carson Rodrigues' entry for the Kaggle competition
-[arc-prize-2026-arc-agi-3](https://www.kaggle.com/competitions/arc-prize-2026-arc-agi-3)
-(final submissions 2026-11-02 23:59 UTC).
+An LLM agent harness and Kaggle notebook pipeline for ARC-AGI-3: Carson Rodrigues' entry for the Kaggle
+competition [arc-prize-2026-arc-agi-3](https://www.kaggle.com/competitions/arc-prize-2026-arc-agi-3)
+(final submissions closed 2026-11-02 23:59 UTC).
 
 The agent is an LLM in a Python REPL: Qwen3.8-Flash-Next (Intel AutoRound W4A16 + Albucino MTP
 draft, served by SGLang "Pennyroyal") plays each game through Tufa Labs' Duck harness as extended
 by Daniel Franzen for Milestone 2. This repository owns the deployment pipeline, the configuration
 variants, local CPU tooling, and the harness changes layered on top of Franzen's tree.
+
+Its best draw on the 55 hidden games scored on the public leaderboard was 29.93 (v1, all added switches off); the
+thirteen valid draws across five variants average 26.35 (SD 3.18). The paper that uses it, *What should an agent
+carry from one level to the next?*, is in [rodriguescarson/arc-prize-2026](https://github.com/rodriguescarson/arc-prize-2026)
+([PDF](https://github.com/rodriguescarson/arc-prize-2026/blob/main/paper/level-transfer/paper/paper_full.pdf)) and was
+filed as a writeup in the [ARC Prize 2026 Paper Track](https://www.kaggle.com/competitions/arc-prize-2026-paper-track).
+The GPU notebooks mount two Kaggle datasets:
+[arc3-harness-bundle](https://www.kaggle.com/datasets/carsonrodrigues/arc3-harness-bundle) (the harness source, built
+from this repository by `kaggle/build_bundle.py`) and
+[py312-portable](https://www.kaggle.com/datasets/carsonrodrigues/py312-portable) (an unmodified python-build-standalone
+CPython 3.12 for the cp312 wheelhouses); their descriptions are kept in `kaggle/datasets/`. How to cite:
+[`CITATION.cff`](CITATION.cff).
 
 ```
 harness/        vendored harness tree deployed to Kaggle
